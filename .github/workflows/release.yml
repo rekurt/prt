@@ -60,14 +60,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Publish prt-core
-        run: cargo publish -p prt-core --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p prt-core
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         continue-on-error: true
 
       - name: Wait for crates.io indexing
         run: sleep 30
 
       - name: Publish prt
-        run: cargo publish -p prt --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p prt
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
 
   release:
     name: Create GitHub Release
