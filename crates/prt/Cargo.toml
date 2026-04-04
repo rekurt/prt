@@ -1,0 +1,20 @@
+[package]
+name = "prt"
+version = "0.1.0"
+description = "prt — terminal UI for monitoring network ports"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "prt"
+path = "src/main.rs"
+
+[dependencies]
+prt-core.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+arboard.workspace = true
+ratatui = "0.29"
+crossterm = "0.28"
