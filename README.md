@@ -11,9 +11,12 @@
 <br>
 <br>
 
+[![Crates.io](https://img.shields.io/crates/v/prt.svg)](https://crates.io/crates/prt)
+[![Downloads](https://img.shields.io/crates/d/prt.svg)](https://crates.io/crates/prt)
 [![CI](https://github.com/rekurt/prt/actions/workflows/ci.yml/badge.svg)](https://github.com/rekurt/prt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![docs.rs](https://docs.rs/prt-core/badge.svg)](https://docs.rs/prt-core)
 
 [English](README.md) | [Русский](README.ru.md) | [中文](README.zh.md)
 

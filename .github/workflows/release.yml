@@ -51,9 +51,27 @@ jobs:
           name: prt-${{ matrix.target }}
           path: prt-${{ matrix.target }}.tar.gz
 
+  publish-crates:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish prt-core
+        run: cargo publish -p prt-core --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+
+      - name: Wait for crates.io indexing
+        run: sleep 30
+
+      - name: Publish prt
+        run: cargo publish -p prt --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
   release:
-    name: Create Release
-    needs: build
+    name: Create GitHub Release
+    needs: [build, publish-crates]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

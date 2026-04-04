@@ -7,6 +7,9 @@ edition = "2021"
 license = "MIT"
 repository = "https://github.com/rekurt/prt"
 rust-version = "1.75"
+homepage = "https://github.com/rekurt/prt"
+keywords = ["network", "port", "monitor", "tui", "terminal"]
+categories = ["command-line-utilities", "network-programming"]
 
 [workspace.dependencies]
 anyhow = "1"
@@ -17,4 +20,4 @@ arboard = "3"
 nix = { version = "0.29", features = ["signal", "process", "user"] }
 uzers = "0.11"
 clap = { version = "4", features = ["derive"] }
-prt-core = { path = "crates/prt-core", version = "0.1.0" }
+prt-core = { path = "crates/prt-core", version = "0.2.0" }

@@ -1,11 +1,15 @@
 [package]
 name = "prt"
-version = "0.1.0"
-description = "prt — terminal UI for monitoring network ports"
+version = "0.2.0"
+description = "Real-time terminal UI for monitoring network ports — interactive alternative to lsof/ss with colors, filtering and process trees"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+homepage.workspace = true
+keywords = ["network", "port", "monitor", "tui", "terminal"]
+categories = ["command-line-utilities", "network-programming"]
+readme = "README.md"
 
 [[bin]]
 name = "prt"

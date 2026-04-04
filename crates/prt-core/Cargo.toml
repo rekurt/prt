@@ -1,11 +1,15 @@
 [package]
 name = "prt-core"
-version = "0.1.0"
-description = "Core library for prt — network port monitor"
+version = "0.2.0"
+description = "Core library for prt — real-time network port scanner, tracker and exporter for macOS and Linux"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+homepage.workspace = true
+keywords = ["network", "port", "scanner", "lsof", "procfs"]
+categories = ["network-programming", "os"]
+readme = "README.md"
 
 [dependencies]
 anyhow.workspace = true
