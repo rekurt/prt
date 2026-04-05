@@ -68,6 +68,7 @@ pub static STRINGS: Strings = Strings {
   p            copy PID to clipboard
   b            block remote IP (firewall)
   t            attach/detach strace
+  F            SSH port forward (tunnel)
 
   Table:
   Tab          next sort column
@@ -105,6 +106,11 @@ pub static STRINGS: Strings = Strings {
     hint_trace: "trace",
     hint_navigate: "navigate",
     hint_tabs: "tabs",
+
+    forward_prompt_title: " SSH Forward ",
+    forward_host_label: " host:port → ",
+    forward_confirm_hint: " [Enter] create  [Esc] cancel",
+    hint_forward: "forward",
 
     lang_switched: "language switched",
 

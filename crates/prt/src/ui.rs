@@ -39,6 +39,9 @@ pub fn draw(f: &mut Frame, app: &App) {
     if app.confirm_block.is_some() {
         draw_block_confirm(f, app);
     }
+    if app.forward_prompt {
+        draw_forward_prompt(f, app);
+    }
 
     draw_footer(f, app, chunks[2]);
 }
@@ -125,6 +128,17 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
             ),
             Style::default().fg(Color::DarkGray),
         ));
+    }
+
+    // Active tunnels indicator
+    let tunnels = app.forwards.summaries();
+    if !tunnels.is_empty() {
+        let label = if tunnels.len() == 1 {
+            format!(" \u{21c4} {} ", tunnels[0])
+        } else {
+            format!(" \u{21c4} {} tunnels ", tunnels.len())
+        };
+        parts.push(Span::styled(label, Style::default().fg(Color::Cyan)));
     }
 
     // View mode indicator (when not in Table)
@@ -1063,6 +1077,62 @@ fn draw_block_confirm(f: &mut Frame, app: &App) {
     }
 }
 
+// ── Overlay: SSH forward prompt ──────────────────────────────────
+
+fn draw_forward_prompt(f: &mut Frame, app: &App) {
+    let s = i18n::strings();
+    let area = f.area();
+    let local_port = app
+        .selected_entry()
+        .map(|e| e.entry.local_port())
+        .unwrap_or(0);
+
+    let w = 50u16.min(area.width.saturating_sub(4));
+    let h = 6u16;
+    let x = (area.width.saturating_sub(w)) / 2;
+    let y = (area.height.saturating_sub(h)) / 2;
+    let popup_area = Rect::new(x, y, w, h);
+
+    f.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(s.forward_prompt_title);
+
+    let inner = block.inner(popup_area);
+    f.render_widget(block, popup_area);
+
+    let tunnel_count = app.forwards.count();
+    let status = if tunnel_count > 0 {
+        format!("  ({tunnel_count} active)")
+    } else {
+        String::new()
+    };
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(
+                format!("  localhost:{local_port} →"),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::raw(&status),
+        ]),
+        Line::from(vec![
+            Span::styled(s.forward_host_label, Style::default().fg(Color::Cyan)),
+            Span::raw(&app.forward_input),
+            Span::styled("\u{2588}", Style::default().fg(Color::White)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            s.forward_confirm_hint,
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    f.render_widget(Paragraph::new(lines), inner);
+}
+
 // ── Help overlay ─────────────────────────────────────────────────
 
 fn draw_help(f: &mut Frame, area: Rect) {
@@ -1137,6 +1207,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
             }
             hint(&mut hints, "4-7", s.hint_views);
             hint(&mut hints, "K", s.hint_kill);
+            hint(&mut hints, "F", s.hint_forward);
             hint(&mut hints, "Tab", s.hint_sort);
             if !app.session.is_root && !app.session.is_elevated {
                 hint(&mut hints, "s", s.hint_sudo);

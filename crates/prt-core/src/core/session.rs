@@ -5,12 +5,10 @@
 
 use crate::config::PrtConfig;
 use crate::core::bandwidth::BandwidthTracker;
-use crate::core::history::ConnectionHistory;
 use crate::core::{container, scanner, suspicious};
 use crate::i18n;
 use crate::known_ports;
 use crate::model::{EntryStatus, SortState, TrackedEntry, GONE_RETENTION};
-use std::collections::HashMap;
 use std::time::Instant;
 
 /// Shared scan session state used by the TUI app.
@@ -26,7 +24,6 @@ pub struct Session {
     pub is_elevated: bool,
     pub is_root: bool,
     pub config: PrtConfig,
-    pub history: ConnectionHistory,
     pub bandwidth: BandwidthTracker,
     sudo_password: Option<String>,
 }
@@ -45,7 +42,6 @@ impl Session {
             is_elevated: false,
             is_root: scanner::is_root(),
             config: crate::config::load_config(),
-            history: ConnectionHistory::new(),
             bandwidth: BandwidthTracker::new(),
             sudo_password: None,
         }
@@ -74,7 +70,6 @@ impl Session {
                 });
 
                 // ── Metrics ─────────────────────────────────────
-                self.update_history();
                 self.bandwidth.sample();
 
                 scanner::sort_entries(&mut self.entries, &self.sort);
@@ -127,19 +122,6 @@ impl Session {
         }
     }
 
-    /// Record connection counts per (port, pid) for sparkline history.
-    fn update_history(&mut self) {
-        let mut counts: HashMap<(u16, u32), u16> = HashMap::new();
-        for e in &self.entries {
-            if e.status != EntryStatus::Gone {
-                *counts
-                    .entry((e.entry.local_port(), e.entry.process.pid))
-                    .or_insert(0) += 1;
-            }
-        }
-        self.history.record(&counts);
-    }
-
     /// Get cached sudo password (if elevated). Used by firewall block.
     pub fn sudo_password(&self) -> Option<&str> {
         self.sudo_password.as_deref()
@@ -171,7 +153,6 @@ impl Session {
                 self.enrich_containers();
 
                 // ── Metrics ─────────────────────────────────────
-                self.update_history();
                 self.bandwidth.sample();
 
                 scanner::sort_entries(&mut self.entries, &self.sort);

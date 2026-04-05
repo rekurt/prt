@@ -20,7 +20,7 @@ crates/
   prt-core/    # Core library: model, scanner, session, alerts, suspicious, bandwidth,
                #   containers, namespaces, process_detail, firewall, known_ports,
                #   config, killer, i18n, platform
-  prt/         # TUI binary: app, ui (ViewMode routing), input, stream, watch, tracer
+  prt/         # TUI binary: app, ui (ViewMode routing), input, stream, watch, tracer, forward
 ```
 
 ### Build & Test

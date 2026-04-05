@@ -198,6 +198,12 @@ pub struct Strings {
     pub hint_navigate: &'static str,
     pub hint_tabs: &'static str,
 
+    // Forward dialog
+    pub forward_prompt_title: &'static str,
+    pub forward_host_label: &'static str,
+    pub forward_confirm_hint: &'static str,
+    pub hint_forward: &'static str,
+
     // Help overlay
     pub help_title: &'static str,
 }

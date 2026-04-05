@@ -68,6 +68,7 @@ pub static STRINGS: Strings = Strings {
   p            копировать PID в буфер
   b            блокировать IP (firewall)
   t            подключить/отключить strace
+  F            SSH проброс порта (туннель)
 
   Таблица:
   Tab          следующая колонка сортировки
@@ -105,6 +106,11 @@ pub static STRINGS: Strings = Strings {
     hint_trace: "трасс.",
     hint_navigate: "навиг.",
     hint_tabs: "вкладки",
+
+    forward_prompt_title: " SSH-туннель ",
+    forward_host_label: " хост:порт → ",
+    forward_confirm_hint: " [Enter] создать  [Esc] отмена",
+    hint_forward: "туннель",
 
     lang_switched: "язык переключён",
 

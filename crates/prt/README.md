@@ -32,6 +32,7 @@ cargo install prt
 | **Kill** | Select → `K` → `y` (SIGTERM) or `f` (SIGKILL) |
 | **Firewall block** | `b` → block remote IP with undo command |
 | **Strace** | `t` → live syscall tracing in split panel |
+| **SSH Forward** | `F` → SSH -L tunnel from selected port |
 | **Containers** | Docker/Podman container name column (auto-hides) |
 | **Bandwidth** | System-wide RX/TX in header |
 | **Export** | `--export json/csv`, `--json` (NDJSON stream) |
@@ -59,7 +60,7 @@ sudo prt                # run as root
 
 **Views:** `4` chart, `5` topology, `6` process detail, `7` namespaces
 
-**Actions:** `K` kill, `c` copy, `p` copy PID, `b` block IP, `t` strace, `Tab` sort, `L` language
+**Actions:** `K` kill, `c` copy, `p` copy PID, `b` block IP, `t` strace, `F` forward, `Tab` sort, `L` language
 
 ## Architecture
 
@@ -74,7 +75,8 @@ crates/
     ├── input.rs     # Key dispatch
     ├── stream.rs    # NDJSON streaming mode
     ├── watch.rs     # Port watch mode
-    └── tracer.rs    # Strace/dtruss session management
+    ├── tracer.rs    # Strace/dtruss session management
+    └── forward.rs   # SSH tunnel manager
 ```
 
 ## License

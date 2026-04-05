@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **New Actions:**
 - Firewall quick-block (`b`) — block remote IP via iptables/pfctl with confirmation dialog and undo command
 - Strace/dtruss attach (`t`) — live syscall tracing in split panel with auto-detach
+- SSH port forwarding (`F`) — create SSH -L tunnels from TUI with input dialog, active tunnel count in header, auto-cleanup on exit
 
 **New CLI Modes:**
 - `prt --json` — NDJSON streaming mode for scripting/piping

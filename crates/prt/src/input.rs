@@ -62,6 +62,26 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    if app.forward_prompt {
+        match key.code {
+            KeyCode::Esc => {
+                app.forward_prompt = false;
+                app.forward_input.clear();
+            }
+            KeyCode::Enter => {
+                app.create_forward();
+            }
+            KeyCode::Backspace => {
+                app.forward_input.pop();
+            }
+            KeyCode::Char(c) if app.forward_input.len() < 256 => {
+                app.forward_input.push(c);
+            }
+            _ => {}
+        }
+        return;
+    }
+
     if app.filter_mode {
         match key.code {
             KeyCode::Esc | KeyCode::Enter => {
@@ -238,6 +258,14 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         // Strace attach/detach
         KeyCode::Char('t') => {
             app.toggle_tracer();
+        }
+
+        // SSH port forwarding
+        KeyCode::Char('F') => {
+            if app.selected_entry().is_some() {
+                app.forward_prompt = true;
+                app.forward_input.clear();
+            }
         }
 
         // Sort (Table mode)

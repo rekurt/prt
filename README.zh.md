@@ -111,6 +111,17 @@
 
 再次按 `t` 分离。跟踪器进程在退出时自动终止。
 
+### SSH 端口转发
+
+按 `F`（Shift+F）为选中端口创建 SSH 隧道。对话框提示输入远程主机：
+
+```
+localhost:5432 →
+主机:端口 → user@server.io:5432█
+```
+
+隧道通过 `ssh -N -L <local>:localhost:<remote> <host>` 创建。活跃隧道显示在标题栏（`⇄ localhost:5432 → server:22`）。隧道每次刷新检查健康状态，退出时通过 `Drop` 自动终止。
+
 ### 告警规则
 
 在 `~/.config/prt/config.toml` 中定义规则：
@@ -241,6 +252,7 @@ sudo prt                # 以 root 运行（查看所有进程）
 | `p` | 复制 PID 到剪贴板 |
 | `b` | 封锁远程 IP（防火墙） |
 | `t` | 附加/分离 strace |
+| `F` | SSH端口转发 (隧道) |
 | `r` | 刷新 |
 | `s` | Sudo 密码 |
 | `Tab` | 下一排序列 |

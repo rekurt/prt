@@ -20,8 +20,8 @@ Note: `cargo` may require `export PATH="$HOME/.cargo/bin:$PATH"` on this machine
 
 Network port monitor with TUI interface (ratatui) for macOS and Linux. Workspace with 2 crates:
 
-- **prt-core** — library: model, scanner, killer, platform abstraction, i18n, session, config, known ports, alerts, suspicious detection, bandwidth, containers, namespaces, process detail, firewall, history (internal)
-- **prt** — TUI binary (ratatui + crossterm + clap) with stream/watch/tracer modules. Also contains forward.rs (SSH tunnel manager, not yet connected to UI)
+- **prt-core** — library: model, scanner, killer, platform abstraction, i18n, session, config, known ports, alerts, suspicious detection, bandwidth, containers, namespaces, process detail, firewall
+- **prt** — TUI binary (ratatui + crossterm + clap) with stream/watch/tracer/forward modules
 
 **Data flow:** `platform::scan_ports()` → `Session::refresh()` → `scanner::diff_entries()` (tracks New/Unchanged/Gone with first_seen carry-forward) → enrich (service names, suspicious, containers) → `scanner::sort_entries()` → `scanner::filter_indices()` → `alerts::evaluate()` → UI renders (ViewMode-based routing)
 

@@ -6,7 +6,6 @@
 use std::process::{Child, Command, Stdio};
 
 /// A single SSH tunnel.
-#[allow(dead_code)]
 pub struct SshTunnel {
     pub local_port: u16,
     pub remote: String,
@@ -31,6 +30,11 @@ impl SshTunnel {
             remote: format!("{remote_host}:{remote_port}"),
             child,
         })
+    }
+
+    /// Human-readable summary: "localhost:8080 → server:22".
+    pub fn summary(&self) -> String {
+        format!("localhost:{} → {}", self.local_port, self.remote)
     }
 
     /// Check if the tunnel is still alive.
@@ -62,7 +66,6 @@ impl Default for ForwardManager {
     }
 }
 
-#[allow(dead_code)]
 impl ForwardManager {
     pub fn new() -> Self {
         Self {
@@ -98,6 +101,11 @@ impl ForwardManager {
     /// Number of active tunnels.
     pub fn count(&self) -> usize {
         self.tunnels.len()
+    }
+
+    /// List summaries of all active tunnels.
+    pub fn summaries(&self) -> Vec<String> {
+        self.tunnels.iter().map(|t| t.summary()).collect()
     }
 }
 

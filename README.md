@@ -111,6 +111,17 @@ Press `t` to attach a system call tracer to the selected process. The detail pan
 
 Press `t` again to detach. The tracer process is automatically killed on exit.
 
+### SSH Port Forwarding
+
+Press `F` (Shift+F) to create an SSH tunnel for the selected port. A dialog prompts for the remote host:
+
+```
+localhost:5432 →
+host:port → user@server.io:5432█
+```
+
+The tunnel is created via `ssh -N -L <local>:localhost:<remote> <host>`. Active tunnels are shown in the header bar (`⇄ localhost:5432 → server:22`). Tunnels are health-checked each tick and automatically killed on exit via `Drop`.
+
 ### Alert Rules
 
 Define rules in `~/.config/prt/config.toml` to get notified when specific conditions are met:
@@ -241,6 +252,7 @@ sudo prt                # run as root (see all processes)
 | `p` | Copy PID to clipboard |
 | `b` | Block remote IP (firewall) |
 | `t` | Attach/detach strace |
+| `F` | SSH port forward (tunnel) |
 | `r` | Refresh |
 | `s` | Sudo prompt |
 | `Tab` | Next sort column |
@@ -303,7 +315,8 @@ crates/
     ├── input.rs               # Key dispatch by view mode
     ├── stream.rs              # NDJSON streaming mode
     ├── watch.rs               # Port watch mode
-    └── tracer.rs              # Strace/dtruss session management
+    ├── tracer.rs              # Strace/dtruss session management
+    └── forward.rs             # SSH tunnel manager
 ```
 
 **Data flow:**

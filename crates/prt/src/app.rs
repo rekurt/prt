@@ -43,6 +43,10 @@ pub struct App {
     pub confirm_block: Option<(std::net::IpAddr, String)>,
     /// SSH tunnel manager.
     pub forwards: ForwardManager,
+    /// Forward dialog: user is typing "host:port" to create SSH tunnel.
+    pub forward_prompt: bool,
+    /// Forward dialog input buffer: "user@host:port" or "host:port".
+    pub forward_input: String,
     /// Active strace/dtruss session.
     pub tracer: Option<StraceSession>,
     /// Cached process detail (PID → detail). Refreshed on PID change or refresh.
@@ -73,6 +77,8 @@ impl App {
             active_alerts: Vec::new(),
             confirm_block: None,
             forwards: ForwardManager::new(),
+            forward_prompt: false,
+            forward_input: String::new(),
             tracer: None,
             detail_cache: None,
             namespace_cache: Vec::new(),
@@ -201,6 +207,44 @@ impl App {
         }
     }
 
+    /// Create SSH forward from selected port using the input string.
+    /// Input format: "host:port" or "user@host:port".
+    /// The local port is the selected entry's port.
+    pub fn create_forward(&mut self) {
+        let input = std::mem::take(&mut self.forward_input);
+        self.forward_prompt = false;
+
+        // Parse input: "host:port" or "user@host:port"
+        let (remote_host, remote_port) = match parse_forward_input(&input) {
+            Some(parsed) => parsed,
+            None => {
+                self.set_status(format!("invalid format: use host:port — got '{input}'"));
+                return;
+            }
+        };
+
+        // Use selected entry's local port
+        let local_port = match self.selected_entry() {
+            Some(e) => e.entry.local_port(),
+            None => {
+                self.set_status("no port selected for forwarding".into());
+                return;
+            }
+        };
+
+        match self.forwards.add(local_port, &remote_host, remote_port) {
+            Ok(_) => {
+                self.set_status(format!(
+                    "tunnel: localhost:{local_port} → {remote_host}:{remote_port} ({} active)",
+                    self.forwards.count()
+                ));
+            }
+            Err(e) => {
+                self.set_status(format!("forward failed: {e}"));
+            }
+        }
+    }
+
     /// Toggle strace attachment on the selected process.
     pub fn toggle_tracer(&mut self) {
         if self.tracer.is_some() {
@@ -322,4 +366,71 @@ pub fn run() -> Result<()> {
     disable_raw_mode()?;
     stdout().execute(LeaveAlternateScreen)?;
     Ok(())
+}
+
+/// Parse forward input: "host:port" or "user@host:port".
+/// Returns (remote_host_string, remote_port).
+fn parse_forward_input(input: &str) -> Option<(String, u16)> {
+    let input = input.trim();
+    if input.is_empty() {
+        return None;
+    }
+    // Find the last ':' — port is always after it
+    let colon_pos = input.rfind(':')?;
+    let host_part = &input[..colon_pos];
+    let port_part = &input[colon_pos + 1..];
+
+    if host_part.is_empty() {
+        return None;
+    }
+
+    let port: u16 = port_part.parse().ok()?;
+    Some((host_part.to_string(), port))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_forward_simple_host_port() {
+        let (host, port) = parse_forward_input("example.com:8080").unwrap();
+        assert_eq!(host, "example.com");
+        assert_eq!(port, 8080);
+    }
+
+    #[test]
+    fn parse_forward_user_at_host() {
+        let (host, port) = parse_forward_input("user@server.io:22").unwrap();
+        assert_eq!(host, "user@server.io");
+        assert_eq!(port, 22);
+    }
+
+    #[test]
+    fn parse_forward_ip_address() {
+        let (host, port) = parse_forward_input("192.168.1.1:3000").unwrap();
+        assert_eq!(host, "192.168.1.1");
+        assert_eq!(port, 3000);
+    }
+
+    #[test]
+    fn parse_forward_empty() {
+        assert!(parse_forward_input("").is_none());
+    }
+
+    #[test]
+    fn parse_forward_no_port() {
+        assert!(parse_forward_input("host").is_none());
+    }
+
+    #[test]
+    fn parse_forward_no_host() {
+        assert!(parse_forward_input(":8080").is_none());
+    }
+
+    #[test]
+    fn parse_forward_invalid_port() {
+        assert!(parse_forward_input("host:abc").is_none());
+        assert!(parse_forward_input("host:99999").is_none());
+    }
 }

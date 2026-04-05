@@ -68,6 +68,7 @@ pub static STRINGS: Strings = Strings {
   p            复制PID到剪贴板
   b            封锁远程IP (防火墙)
   t            附加/分离 strace
+  F            SSH端口转发 (隧道)
 
   表格:
   Tab          下一排序列
@@ -105,6 +106,11 @@ pub static STRINGS: Strings = Strings {
     hint_trace: "跟踪",
     hint_navigate: "导航",
     hint_tabs: "标签",
+
+    forward_prompt_title: " SSH隧道 ",
+    forward_host_label: " 主机:端口 → ",
+    forward_confirm_hint: " [Enter] 创建  [Esc] 取消",
+    hint_forward: "转发",
 
     lang_switched: "语言已切换",
 
