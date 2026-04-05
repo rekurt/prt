@@ -22,7 +22,7 @@ cargo install prt
 |---------|-------------|
 | **Live table** | Ports, services, protocols, states, PIDs, processes, users. Auto-refreshes every 2s |
 | **Change tracking** | New connections green; closed fade red for 5s |
-| **Known ports** | Service column with ~200 built-in names + config overrides |
+| **Known ports** | Service column with ~170 built-in names + config overrides |
 | **Connection aging** | Color-coded by age (>1h yellow, >24h red, CLOSE_WAIT always red) |
 | **Suspicious detector** | `[!]` flags for non-root on privileged ports, scripts on sensitive ports |
 | **Process tree** | Full parent chain (e.g. `launchd → nginx → worker`) |

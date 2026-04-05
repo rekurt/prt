@@ -12,7 +12,7 @@ Core library for [**prt**](https://crates.io/crates/prt) — a real-time network
 
 - **Scanning** network ports (TCP/UDP) via `lsof` on macOS or `/proc` on Linux
 - **Tracking** connection changes over time (New → Unchanged → Gone) with `first_seen` aging
-- **Enrichment** — known port names (~200 built-in + user overrides), suspicious connection detection, container awareness
+- **Enrichment** — known port names (~170 built-in + user overrides), suspicious connection detection, container awareness
 - **Filtering** by port, PID, process name, service, protocol, state, user, or `!` (suspicious)
 - **Sorting** by any column, ascending or descending
 - **Exporting** to JSON or CSV
@@ -33,10 +33,13 @@ platform::scan_ports()
     → Session::refresh()
         → scanner::diff_entries()   (New / Unchanged / Gone + first_seen carry-forward)
         → enrich: service names, suspicious flags, containers
+        → retain: drop Gone entries older than 5s
+        → bandwidth.sample(): RX/TX rate delta
         → scanner::sort_entries()
-        → scanner::filter_indices()
+    → (frontend layer)
         → alerts::evaluate()
-    → UI renders
+        → scanner::filter_indices()
+        → UI renders
 ```
 
 | Platform | Method | Performance |
@@ -89,7 +92,7 @@ for entry in &session.entries {
 | `core::process_detail` | CWD, env, open files, CPU %, RSS |
 | `core::firewall` | iptables/pfctl block/unblock command generation |
 | `core::killer` | SIGTERM / SIGKILL |
-| `known_ports` | Port → service name database (~200 entries + config overrides) |
+| `known_ports` | Port → service name database (~170 entries + config overrides) |
 | `config` | TOML config loading (known_ports, alert rules) |
 | `i18n` | EN / RU / ZH runtime switching |
 | `platform` | macOS (lsof) / Linux (/proc) |

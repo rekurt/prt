@@ -36,7 +36,7 @@
 
 ### 已知端口数据库
 
-`Service` 列将常见端口号映射为可读名称 — http (80)、ssh (22)、postgres (5432) 等约200个。可在 `~/.config/prt/config.toml` 中覆盖或扩展：
+`Service` 列将常见端口号映射为可读名称 — http (80)、ssh (22)、postgres (5432) 等约170个。可在 `~/.config/prt/config.toml` 中覆盖或扩展：
 
 ```toml
 [known_ports]

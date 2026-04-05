@@ -1,6 +1,6 @@
 //! Well-known port → service name database.
 //!
-//! Provides a compile-time lookup table for ~200 common ports.
+//! Provides a compile-time lookup table for ~170 common ports.
 //! User overrides from `~/.config/prt/config.toml` take precedence.
 
 use std::collections::HashMap;

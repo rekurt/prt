@@ -23,7 +23,7 @@ Network port monitor with TUI interface (ratatui) for macOS and Linux. Workspace
 - **prt-core** — library: model, scanner, killer, platform abstraction, i18n, session, config, known ports, alerts, suspicious detection, bandwidth, containers, namespaces, process detail, firewall
 - **prt** — TUI binary (ratatui + crossterm + clap) with stream/watch/tracer/forward modules
 
-**Data flow:** `platform::scan_ports()` → `Session::refresh()` → `scanner::diff_entries()` (tracks New/Unchanged/Gone with first_seen carry-forward) → enrich (service names, suspicious, containers) → `scanner::sort_entries()` → `scanner::filter_indices()` → `alerts::evaluate()` → UI renders (ViewMode-based routing)
+**Data flow:** `platform::scan_ports()` → `Session::refresh()` → `scanner::diff_entries()` (tracks New/Unchanged/Gone with first_seen carry-forward) → enrich (service names, suspicious, containers) → retain (drop Gone after 5s) → `bandwidth.sample()` → `scanner::sort_entries()` → (in App::refresh) `alerts::evaluate()` → cache invalidation → `scanner::filter_indices()` → UI renders (ViewMode-based routing)
 
 **Key design decisions:**
 - Platform abstraction via `platform/mod.rs` with `#[cfg(target_os)]` — macOS uses `lsof` output parsing, Linux uses `/proc` via `procfs` crate
@@ -45,4 +45,4 @@ Network port monitor with TUI interface (ratatui) for macOS and Linux. Workspace
 
 ## Testing Patterns
 
-Tests are inline `#[cfg(test)] mod tests` in each module (180 in prt-core, 8 in prt). Helper functions `make_entry()` / `make_tracked()` create test data with minimal required fields. Platform-specific parsing tests (macos.rs) run only on macOS via `#[cfg(target_os = "macos")]`.
+Tests are inline `#[cfg(test)] mod tests` in each module (172 in prt-core + 1 doc-test, 15 in prt = 188 total). Helper functions `make_entry()` / `make_tracked()` create test data with minimal required fields. Platform-specific parsing tests (macos.rs) run only on macOS via `#[cfg(target_os = "macos")]`.

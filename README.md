@@ -36,7 +36,7 @@ The main view displays all active network connections in a sortable, filterable 
 
 ### Known Ports Database
 
-The `Service` column maps well-known port numbers to human-readable names — http (80), ssh (22), postgres (5432), and ~200 more. You can override or extend with custom names in `~/.config/prt/config.toml`:
+The `Service` column maps well-known port numbers to human-readable names — http (80), ssh (22), postgres (5432), and ~170 more. You can override or extend with custom names in `~/.config/prt/config.toml`:
 
 ```toml
 [known_ports]
@@ -301,7 +301,6 @@ crates/
 │   │   ├── suspicious.rs      # Suspicious connection heuristics
 │   │   ├── bandwidth.rs       # System-wide RX/TX rate tracking
 │   │   ├── container.rs       # Docker/Podman container resolution
-│   │   ├── history.rs         # Connection count history (internal)
 │   │   ├── namespace.rs       # Network namespace grouping (Linux)
 │   │   ├── process_detail.rs  # CWD, env, files, CPU, RSS
 │   │   └── firewall.rs        # iptables/pfctl block/unblock
@@ -324,11 +323,13 @@ crates/
 ```
 platform::scan_ports() → Session::refresh()
     → diff_entries()        New / Unchanged / Gone (with first_seen carry-forward)
-    → retain()              remove Gone after 5s
     → enrich()              service names, suspicious flags, containers
+    → retain()              remove Gone after 5s
+    → bandwidth.sample()    RX/TX delta since previous cycle
     → sort_entries()        by current SortState
-    → filter_indices()      user's search query
+App::refresh()
     → alerts::evaluate()    fire bell/highlight alerts
+    → filter_indices()      user's search query
     → UI renders            ViewMode-based routing
 ```
 

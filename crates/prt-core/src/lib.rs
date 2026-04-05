@@ -13,10 +13,13 @@
 //!     → Session::refresh()
 //!         → scanner::diff_entries()       (New / Unchanged / Gone + first_seen)
 //!         → enrich: service names, suspicious flags, containers
+//!         → retain: drop Gone entries older than 5s
+//!         → bandwidth.sample()
 //!         → scanner::sort_entries()
-//!         → scanner::filter_indices()
+//!     → (frontend layer)
 //!         → alerts::evaluate()
-//!     → UI renders
+//!         → scanner::filter_indices()
+//!         → UI renders
 //! ```
 //!
 //! # Modules
@@ -28,7 +31,7 @@
 //!   session management, alerts, suspicious detection, bandwidth tracking,
 //!   container resolution, namespaces, process detail, firewall.
 //! - [`config`] — TOML configuration from `~/.config/prt/` (known port overrides, alert rules).
-//! - [`known_ports`] — Well-known port → service name database (~200 entries + user overrides).
+//! - [`known_ports`] — Well-known port → service name database (~170 entries + user overrides).
 //! - [`i18n`] — Internationalization: runtime-switchable language support
 //!   (English, Russian, Chinese) backed by `AtomicU8`.
 //! - [`platform`] — OS-specific port scanning: macOS (`lsof`), Linux (`/proc`).

@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 **Data Enrichment:**
-- Known ports database — `Service` column shows http, ssh, postgres, etc. (~200 built-in entries, user overrides via `~/.config/prt/config.toml`)
+- Known ports database — `Service` column shows http, ssh, postgres, etc. (~170 built-in entries, user overrides via `~/.config/prt/config.toml`)
 - Connection aging — tracks `first_seen` per connection; ESTABLISHED >1h highlighted yellow, >24h red, CLOSE_WAIT always red
 - Suspicious connection detector — `[!]` tag for non-root on privileged ports, scripting languages on sensitive ports, root outgoing to high ports; filter with `!`
 - Container awareness — shows Docker/Podman container name per process (column auto-hides when no containers detected)
