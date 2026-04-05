@@ -3,15 +3,18 @@
 //! [`Session`] is the single point of truth for scan state. The TUI
 //! delegates all data operations to it, keeping the UI layer thin.
 
-use crate::core::scanner;
+use crate::config::PrtConfig;
+use crate::core::bandwidth::BandwidthTracker;
+use crate::core::{container, scanner, suspicious};
 use crate::i18n;
+use crate::known_ports;
 use crate::model::{EntryStatus, SortState, TrackedEntry, GONE_RETENTION};
 use std::time::Instant;
 
 /// Shared scan session state used by the TUI app.
 ///
 /// Encapsulates the full refresh cycle:
-/// `scan → diff → retain(gone) → sort`
+/// `scan → diff → enrich → retain(gone) → sort`
 ///
 /// Stores sudo password (if elevated) so subsequent refreshes
 /// can re-authenticate without user interaction.
@@ -20,6 +23,8 @@ pub struct Session {
     pub sort: SortState,
     pub is_elevated: bool,
     pub is_root: bool,
+    pub config: PrtConfig,
+    pub bandwidth: BandwidthTracker,
     sudo_password: Option<String>,
 }
 
@@ -36,11 +41,13 @@ impl Session {
             sort: SortState::default(),
             is_elevated: false,
             is_root: scanner::is_root(),
+            config: crate::config::load_config(),
+            bandwidth: BandwidthTracker::new(),
             sudo_password: None,
         }
     }
 
-    /// Run a scan cycle: scan -> diff -> retain -> sort.
+    /// Run a scan cycle: scan → diff → enrich → retain → sort.
     pub fn refresh(&mut self) -> Result<(), String> {
         let scan_result = if let Some(password) = &self.sudo_password {
             scanner::scan_with_sudo(password)
@@ -52,9 +59,19 @@ impl Session {
             Ok(new_entries) => {
                 let now = Instant::now();
                 self.entries = scanner::diff_entries(&self.entries, new_entries, now);
+
+                // ── Enrichment pipeline ──────────────────────────
+                self.enrich_service_names();
+                self.enrich_suspicious();
+                self.enrich_containers();
+
                 self.entries.retain(|e| {
                     e.status != EntryStatus::Gone || now.duration_since(e.seen_at) < GONE_RETENTION
                 });
+
+                // ── Metrics ─────────────────────────────────────
+                self.bandwidth.sample();
+
                 scanner::sort_entries(&mut self.entries, &self.sort);
                 Ok(())
             }
@@ -63,6 +80,51 @@ impl Session {
                 Err(s.fmt_scan_error(&e.to_string()))
             }
         }
+    }
+
+    /// Populate service_name on all entries from the known ports DB.
+    /// Skips Gone entries — they carry forward enrichment from `diff_entries`.
+    fn enrich_service_names(&mut self) {
+        for entry in &mut self.entries {
+            if entry.status != EntryStatus::Gone {
+                entry.service_name =
+                    known_ports::lookup(entry.entry.local_port(), &self.config.known_ports);
+            }
+        }
+    }
+
+    /// Run suspicious-connection heuristics on all entries.
+    /// Skips Gone entries — they carry forward enrichment from `diff_entries`.
+    fn enrich_suspicious(&mut self) {
+        for entry in &mut self.entries {
+            if entry.status != EntryStatus::Gone {
+                entry.suspicious = suspicious::check(&entry.entry);
+            }
+        }
+    }
+
+    /// Resolve Docker/Podman container names for all active entries.
+    /// One batched CLI call per refresh cycle. Skips Gone entries.
+    fn enrich_containers(&mut self) {
+        let pids: Vec<u32> = self
+            .entries
+            .iter()
+            .filter(|e| e.status != EntryStatus::Gone)
+            .map(|e| e.entry.process.pid)
+            .collect();
+
+        let names = container::resolve_container_names(&pids);
+
+        for entry in &mut self.entries {
+            if entry.status != EntryStatus::Gone {
+                entry.container_name = names.get(&entry.entry.process.pid).cloned();
+            }
+        }
+    }
+
+    /// Get cached sudo password (if elevated). Used by firewall block.
+    pub fn sudo_password(&self) -> Option<&str> {
+        self.sudo_password.as_deref()
     }
 
     pub fn filtered_indices(&self, query: &str) -> Vec<usize> {
@@ -79,6 +141,20 @@ impl Session {
                 self.is_root = true;
                 let now = Instant::now();
                 self.entries = scanner::diff_entries(&self.entries, new_entries, now);
+
+                // Remove expired Gone entries (same as refresh)
+                self.entries.retain(|e| {
+                    e.status != EntryStatus::Gone || e.seen_at.elapsed() < GONE_RETENTION
+                });
+
+                // ── Enrichment pipeline (same as refresh) ───────
+                self.enrich_service_names();
+                self.enrich_suspicious();
+                self.enrich_containers();
+
+                // ── Metrics ─────────────────────────────────────
+                self.bandwidth.sample();
+
                 scanner::sort_entries(&mut self.entries, &self.sort);
                 s.sudo_elevated.to_string()
             }

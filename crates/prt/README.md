@@ -4,9 +4,7 @@
 [![CI](https://github.com/rekurt/prt/actions/workflows/ci.yml/badge.svg)](https://github.com/rekurt/prt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/rekurt/prt/blob/master/LICENSE)
 
-**Real-time network port monitor for your terminal.**
-
-An interactive alternative to `lsof -i` / `ss -tlnp` with colors, filtering, and process trees.
+**Real-time terminal UI for monitoring network ports — interactive alternative to lsof/ss with colors, filtering and process trees.**
 
 <img src="https://raw.githubusercontent.com/rekurt/prt/master/docs/prt.gif" alt="prt demo" width="720">
 
@@ -22,41 +20,47 @@ cargo install prt
 
 | Feature | Description |
 |---------|-------------|
-| **Live table** | Ports, protocols, states, PIDs, processes, users. Auto-refreshes every 2s |
-| **Change tracking** | New connections flash green; closed ones fade red for 5s |
+| **Live table** | Ports, services, protocols, states, PIDs, processes, users. Auto-refreshes every 2s |
+| **Change tracking** | New connections green; closed fade red for 5s |
+| **Known ports** | Service column with ~170 built-in names + config overrides |
+| **Connection aging** | Color-coded by age (>1h yellow, >24h red, CLOSE_WAIT always red) |
+| **Suspicious detector** | `[!]` flags for non-root on privileged ports, scripts on sensitive ports |
 | **Process tree** | Full parent chain (e.g. `launchd → nginx → worker`) |
-| **Detail tabs** | Tree / Network / Connection — toggle with `1` `2` `3` |
-| **Search & filter** | By port, process name, PID, protocol, state, user |
-| **Sort** | By any column, ascending or descending |
-| **Kill** | Select → `K` → confirm with `y` (SIGTERM) or `f` (SIGKILL) |
-| **Sudo elevation** | Press `s` — see all system processes |
-| **Clipboard** | Copy full line (`c`) or just PID (`p`) |
-| **Export** | `prt --export json` or `prt --export csv` |
-| **Multilingual** | English, Russian, Chinese. Auto-detects locale, switch with `L` |
+| **Detail panel** | Tree / Network / Connection tabs (`1` `2` `3`) |
+| **Fullscreen views** | Chart (`4`), Topology (`5`), Process detail (`6`), Namespaces (`7`) |
+| **Search & filter** | By port, service, process, PID, protocol, state, user. `!` = suspicious |
+| **Kill** | Select → `K` → `y` (SIGTERM) or `f` (SIGKILL) |
+| **Firewall block** | `b` → block remote IP with undo command |
+| **Strace** | `t` → live syscall tracing in split panel |
+| **SSH Forward** | `F` → SSH -L tunnel from selected port |
+| **Containers** | Docker/Podman container name column (auto-hides) |
+| **Bandwidth** | System-wide RX/TX in header |
+| **Export** | `--export json/csv`, `--json` (NDJSON stream) |
+| **Watch mode** | `prt watch 80 443` — compact UP/DOWN with BEL alerts |
+| **Alerts** | TOML config: bell/highlight on port, process, connection count |
+| **Multilingual** | English, Russian, Chinese. Switch with `L` |
+| **Config** | `~/.config/prt/config.toml` — port overrides, alert rules |
 
 ## Usage
 
 ```bash
 prt                     # launch TUI
 prt --lang ru           # Russian interface
-prt --lang zh           # Chinese interface
 prt --export json       # export snapshot to JSON
-prt --export csv        # export snapshot to CSV
-sudo prt                # run as root (see all processes)
+prt --json              # NDJSON streaming
+prt watch 80 443        # compact port watch
+sudo prt                # run as root
 ```
 
 ## Keyboard shortcuts
 
-| Key | Action | | Key | Action |
-|-----|--------|-|-----|--------|
-| `q` | Quit | | `K` / `Del` | Kill process |
-| `?` | Help | | `c` | Copy line |
-| `/` | Search | | `p` | Copy PID |
-| `Esc` | Clear filter | | `Tab` | Next sort column |
-| `r` | Refresh | | `Shift+Tab` | Reverse sort |
-| `s` | Sudo prompt | | `L` | Cycle language |
-| `j`/`k` `↑`/`↓` | Navigate | | `1` `2` `3` | Detail tabs |
-| `g` / `G` | Top / bottom | | `Enter` / `d` | Toggle details |
+**Navigation:** `j`/`k` move, `g`/`G` top/bottom, `/` search, `Esc` back/clear, `q` quit
+
+**Panel:** `Enter`/`d` toggle details, `1`-`3` tabs, `←`/`→` switch tabs
+
+**Views:** `4` chart, `5` topology, `6` process detail, `7` namespaces
+
+**Actions:** `K` kill, `c` copy, `p` copy PID, `b` block IP, `t` strace, `F` forward, `Tab` sort, `L` language
 
 ## Architecture
 
@@ -64,8 +68,15 @@ sudo prt                # run as root (see all processes)
 
 ```
 crates/
-├── prt-core/    # Core library: scanner, tracker, killer, i18n, platform
+├── prt-core/    # Core library: scanner, tracker, alerts, known ports, i18n, platform
 └── prt/         # TUI binary (ratatui + crossterm + clap)
+    ├── app.rs       # App state, main loop, caching
+    ├── ui.rs        # ViewMode-based rendering
+    ├── input.rs     # Key dispatch
+    ├── stream.rs    # NDJSON streaming mode
+    ├── watch.rs     # Port watch mode
+    ├── tracer.rs    # Strace/dtruss session management
+    └── forward.rs   # SSH tunnel manager
 ```
 
 ## License

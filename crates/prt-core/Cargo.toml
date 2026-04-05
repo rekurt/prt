@@ -1,7 +1,7 @@
 [package]
 name = "prt-core"
-version = "0.2.0"
-description = "Core library for prt — real-time network port scanner, tracker and exporter for macOS and Linux"
+version = "0.3.0"
+description = "Core library for prt — real-time network port scanner with change tracking, alerts, suspicious detection, known ports, bandwidth and container awareness"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -19,6 +19,8 @@ csv.workspace = true
 nix.workspace = true
 uzers.workspace = true
 sys-locale = "0.3"
+toml.workspace = true
+dirs.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.17"

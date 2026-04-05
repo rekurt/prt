@@ -14,6 +14,11 @@ pub static STRINGS: Strings = Strings {
     tab_connection: "Соединение",
     no_selected_process: " нет выбранного процесса",
 
+    view_chart: "График",
+    view_topology: "Топология",
+    view_process: "Процесс",
+    view_namespaces: "Namespaces",
+
     process_not_found: "процесс не найден",
 
     iface_address: "  Адрес:      ",
@@ -36,18 +41,36 @@ pub static STRINGS: Strings = Strings {
   Клавиши:
   q            выход
   ?            эта справка
-  /            поиск / фильтр
-  Esc          сбросить фильтр
+  /            поиск / фильтр (! = подозрительные)
+  Esc          назад к таблице / сбросить фильтр
   r            обновить
   s            ввести sudo пароль
-  j/k ↑/↓     навигация
+
+  Навигация:
+  j/k ↑/↓     перемещение выбора
   g/G          в начало / в конец
-  Enter/d      показать/скрыть детали
-  1/2/3        переключение вкладок
-  ←/→ h/l      переключение вкладок
+
+  Нижняя панель (режим таблицы):
+  Enter/d      показать/скрыть панель деталей
+  1/2/3        Дерево / Сеть / Соединение
+  ←/→          переключение вкладок
+  h/l          переключение вкладок
+
+  Полноэкранные режимы:
+  4            График (соединения по процессам)
+  5            Топология (процесс → порт → удалённый)
+  6            Детали процесса (инфо, файлы, env)
+  7            Namespaces (только Linux)
+
+  Действия:
   K/Del        завершить процесс
-  c            копировать строку
-  p            копировать PID
+  c            копировать строку в буфер
+  p            копировать PID в буфер
+  b            блокировать IP (firewall)
+  t            подключить/отключить strace
+  F            SSH проброс порта (туннель)
+
+  Таблица:
   Tab          следующая колонка сортировки
   Shift+Tab    изменить направление сортировки
   L            переключить язык
@@ -73,6 +96,21 @@ pub static STRINGS: Strings = Strings {
     hint_sudo: "sudo",
     hint_quit: "выход",
     hint_lang: "язык",
+
+    hint_back: "назад",
+    hint_details: "детали",
+    hint_views: "режимы",
+    hint_sort: "сорт.",
+    hint_copy: "копир.",
+    hint_block: "блок. IP",
+    hint_trace: "трасс.",
+    hint_navigate: "навиг.",
+    hint_tabs: "вкладки",
+
+    forward_prompt_title: " SSH-туннель ",
+    forward_host_label: " хост:порт → ",
+    forward_confirm_hint: " [Enter] создать  [Esc] отмена",
+    hint_forward: "туннель",
 
     lang_switched: "язык переключён",
 

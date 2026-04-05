@@ -14,6 +14,11 @@ pub static STRINGS: Strings = Strings {
     tab_connection: "Connection",
     no_selected_process: " no process selected",
 
+    view_chart: "Chart",
+    view_topology: "Topology",
+    view_process: "Process",
+    view_namespaces: "Namespaces",
+
     process_not_found: "process not found",
 
     iface_address: "  Address:    ",
@@ -36,18 +41,36 @@ pub static STRINGS: Strings = Strings {
   Keys:
   q            quit
   ?            this help
-  /            search / filter
-  Esc          clear filter
+  /            search / filter (! = suspicious only)
+  Esc          back to table / clear filter
   r            refresh
   s            enter sudo password
-  j/k Up/Down  navigation
+
+  Navigation:
+  j/k Up/Down  move selection
   g/G          jump to start / end
-  Enter/d      show/hide details
-  1/2/3        switch tabs
-  Left/Right   switch tabs
+
+  Bottom panel (Table mode):
+  Enter/d      show/hide detail panel
+  1/2/3        Tree / Network / Connection tab
+  Left/Right   switch detail tab
+  h/l          switch detail tab
+
+  Fullscreen views:
+  4            Chart (connections per process)
+  5            Topology (process -> port -> remote)
+  6            Process detail (info, files, env)
+  7            Namespaces (Linux only)
+
+  Actions:
   K/Del        kill process
-  c            copy line
-  p            copy PID
+  c            copy line to clipboard
+  p            copy PID to clipboard
+  b            block remote IP (firewall)
+  t            attach/detach strace
+  F            SSH port forward (tunnel)
+
+  Table:
   Tab          next sort column
   Shift+Tab    reverse sort direction
   L            switch language
@@ -73,6 +96,21 @@ pub static STRINGS: Strings = Strings {
     hint_sudo: "sudo",
     hint_quit: "quit",
     hint_lang: "lang",
+
+    hint_back: "back",
+    hint_details: "details",
+    hint_views: "views",
+    hint_sort: "sort",
+    hint_copy: "copy",
+    hint_block: "block IP",
+    hint_trace: "trace",
+    hint_navigate: "navigate",
+    hint_tabs: "tabs",
+
+    forward_prompt_title: " SSH Forward ",
+    forward_host_label: " host:port → ",
+    forward_confirm_hint: " [Enter] create  [Esc] cancel",
+    hint_forward: "forward",
 
     lang_switched: "language switched",
 

@@ -140,11 +140,16 @@ pub enum EntryStatus {
     Gone,
 }
 
-/// A [`PortEntry`] with change-tracking metadata.
+/// A [`PortEntry`] with change-tracking metadata and enrichment data.
 ///
 /// The `status` field indicates whether the entry is new, unchanged,
 /// or gone since the last scan. `seen_at` records when the status
 /// was last updated.
+///
+/// Enrichment fields (`first_seen`, `suspicious`, `container_name`,
+/// `service_name`) are populated lazily by the corresponding modules
+/// after the diff step. They use `Option` / `Vec` to be zero-cost
+/// when the corresponding feature is not active.
 #[derive(Debug, Clone)]
 pub struct TrackedEntry {
     /// The underlying port entry.
@@ -153,12 +158,35 @@ pub struct TrackedEntry {
     pub status: EntryStatus,
     /// When this status was assigned.
     pub seen_at: Instant,
+
+    // ── Enrichment fields ────────────────────────────────────────
+    /// When this connection was first observed (carried forward across
+    /// scan cycles for Unchanged entries). Used for connection aging.
+    pub first_seen: Option<Instant>,
+    /// Suspicious activity reasons detected by heuristics.
+    pub suspicious: Vec<SuspiciousReason>,
+    /// Docker/Podman container name, if the process runs inside one.
+    pub container_name: Option<String>,
+    /// Well-known service name for the port (e.g. "http", "ssh").
+    pub service_name: Option<String>,
+}
+
+/// Reason why a connection was flagged as suspicious.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SuspiciousReason {
+    /// Non-root process listening on a privileged port (< 1024).
+    NonRootPrivileged,
+    /// Scripting language (python, perl, ruby, node) on a sensitive port.
+    ScriptOnSensitive,
+    /// Root process making outgoing connection to a high port.
+    RootHighPortOutgoing,
 }
 
 /// Column by which the port table can be sorted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SortColumn {
     Port,
+    Service,
     Protocol,
     State,
     Pid,
@@ -200,7 +228,10 @@ impl SortState {
     }
 }
 
-/// Tab in the detail panel below the port table.
+/// Tab in the detail panel below the port table (selected process info).
+///
+/// These tabs only appear in the bottom split panel when `ViewMode::Table`
+/// is active and `show_details` is true.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetailTab {
     /// Process tree view.
@@ -212,23 +243,51 @@ pub enum DetailTab {
 }
 
 impl DetailTab {
-    /// Cycle to the next tab: Tree → Interface → Connection → Tree.
-    pub fn next(self) -> Self {
-        match self {
-            Self::Tree => Self::Interface,
-            Self::Interface => Self::Connection,
-            Self::Connection => Self::Tree,
-        }
+    /// All tabs in display order.
+    pub const ALL: &[DetailTab] = &[DetailTab::Tree, DetailTab::Interface, DetailTab::Connection];
+
+    /// Position of this tab in [`Self::ALL`] (0-based).
+    pub fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|&t| t == self)
+            .expect("all DetailTab variants must be listed in ALL")
     }
 
-    /// Cycle to the previous tab: Tree → Connection → Interface → Tree.
-    pub fn prev(self) -> Self {
-        match self {
-            Self::Tree => Self::Connection,
-            Self::Interface => Self::Tree,
-            Self::Connection => Self::Interface,
-        }
+    /// Cycle to the next tab (wraps around).
+    pub fn next(self) -> Self {
+        Self::ALL[(self.index() + 1) % Self::ALL.len()]
     }
+
+    /// Cycle to the previous tab (wraps around).
+    pub fn prev(self) -> Self {
+        Self::ALL[(self.index() + Self::ALL.len() - 1) % Self::ALL.len()]
+    }
+
+    /// One-based label used for the tab bar and key dispatch, e.g. `"1"`.
+    pub fn key_label(self) -> String {
+        (self.index() + 1).to_string()
+    }
+}
+
+/// Main view mode — what occupies the primary screen area.
+///
+/// `Table` is the default: shows the port table (+ optional bottom detail panel).
+/// Other modes are fullscreen and replace the table entirely.
+/// Press `Esc` to return to `Table` from any other mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ViewMode {
+    /// Normal port table (default view).
+    #[default]
+    Table,
+    /// Fullscreen bar chart: connections per process.
+    Chart,
+    /// Fullscreen network topology: process → port → remote.
+    Topology,
+    /// Fullscreen process detail: cwd, env, files, CPU/RAM, connections.
+    ProcessDetail,
+    /// Fullscreen network namespace grouping (Linux only).
+    Namespaces,
 }
 
 /// Output format for CLI export mode (`--export`).
@@ -351,10 +410,50 @@ mod tests {
 
     #[test]
     fn detail_tab_next_prev_roundtrip() {
-        for tab in [DetailTab::Tree, DetailTab::Interface, DetailTab::Connection] {
+        for tab in DetailTab::ALL {
+            let tab = *tab;
             assert_eq!(tab.next().prev(), tab, "roundtrip {:?}", tab);
             assert_eq!(tab.prev().next(), tab, "reverse roundtrip {:?}", tab);
         }
+    }
+
+    #[test]
+    fn detail_tab_all_contains_every_variant() {
+        let variant_count = {
+            let mut n = 0u8;
+            for tab in DetailTab::ALL {
+                match tab {
+                    DetailTab::Tree => n += 1,
+                    DetailTab::Interface => n += 1,
+                    DetailTab::Connection => n += 1,
+                }
+            }
+            n as usize
+        };
+        assert_eq!(
+            DetailTab::ALL.len(),
+            variant_count,
+            "ALL must list every DetailTab variant exactly once"
+        );
+    }
+
+    #[test]
+    fn detail_tab_index_matches_position() {
+        for (i, &tab) in DetailTab::ALL.iter().enumerate() {
+            assert_eq!(tab.index(), i, "index of {:?}", tab);
+        }
+    }
+
+    #[test]
+    fn detail_tab_key_label() {
+        assert_eq!(DetailTab::Tree.key_label(), "1");
+        assert_eq!(DetailTab::Interface.key_label(), "2");
+        assert_eq!(DetailTab::Connection.key_label(), "3");
+    }
+
+    #[test]
+    fn view_mode_default_is_table() {
+        assert_eq!(ViewMode::default(), ViewMode::Table);
     }
 
     // ── SortState toggle table ────────────────────────────────────
@@ -363,6 +462,7 @@ mod tests {
     fn sort_state_toggle_all_columns() {
         let columns = [
             SortColumn::Port,
+            SortColumn::Service,
             SortColumn::Protocol,
             SortColumn::State,
             SortColumn::Pid,

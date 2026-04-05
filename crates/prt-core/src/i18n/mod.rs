@@ -134,6 +134,12 @@ pub struct Strings {
     pub tab_connection: &'static str,
     pub no_selected_process: &'static str,
 
+    // View mode labels (fullscreen views)
+    pub view_chart: &'static str,
+    pub view_topology: &'static str,
+    pub view_process: &'static str,
+    pub view_namespaces: &'static str,
+
     // Tree view
     pub process_not_found: &'static str,
 
@@ -173,13 +179,30 @@ pub struct Strings {
     pub sudo_wrong_password: &'static str,
     pub sudo_elevated: &'static str,
 
-    // Footer hints
+    // Footer hints — common
     pub hint_help: &'static str,
     pub hint_search: &'static str,
     pub hint_kill: &'static str,
     pub hint_sudo: &'static str,
     pub hint_quit: &'static str,
     pub hint_lang: &'static str,
+
+    // Footer hints — context-specific
+    pub hint_back: &'static str,
+    pub hint_details: &'static str,
+    pub hint_views: &'static str,
+    pub hint_sort: &'static str,
+    pub hint_copy: &'static str,
+    pub hint_block: &'static str,
+    pub hint_trace: &'static str,
+    pub hint_navigate: &'static str,
+    pub hint_tabs: &'static str,
+
+    // Forward dialog
+    pub forward_prompt_title: &'static str,
+    pub forward_host_label: &'static str,
+    pub forward_confirm_hint: &'static str,
+    pub hint_forward: &'static str,
 
     // Help overlay
     pub help_title: &'static str,

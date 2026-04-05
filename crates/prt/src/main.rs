@@ -1,6 +1,10 @@
 mod app;
+mod forward;
 mod input;
+mod stream;
+mod tracer;
 mod ui;
+mod watch;
 
 use clap::Parser;
 use prt_core::core::scanner;
@@ -29,9 +33,26 @@ struct Cli {
     #[arg(long, value_enum)]
     export: Option<CliExportFormat>,
 
+    /// Stream NDJSON to stdout (one JSON object per line, every scan cycle)
+    #[arg(long)]
+    json: bool,
+
     /// Language (en, ru, zh). Auto-detected if not set.
     #[arg(long)]
     lang: Option<String>,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(clap::Subcommand)]
+enum Commands {
+    /// Watch specific ports — compact UP/DOWN monitor with BEL on changes
+    Watch {
+        /// Ports to watch
+        #[arg(required = true)]
+        ports: Vec<u16>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -49,6 +70,14 @@ fn main() -> anyhow::Result<()> {
         let output = scanner::export(&entries, format.into())?;
         print!("{output}");
         return Ok(());
+    }
+
+    if cli.json {
+        return stream::run_json_stream();
+    }
+
+    if let Some(Commands::Watch { ports }) = cli.command {
+        return watch::run_watch(ports);
     }
 
     app::run()

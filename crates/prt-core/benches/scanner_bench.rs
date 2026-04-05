@@ -53,6 +53,10 @@ fn make_tracked(entries: &[PortEntry]) -> Vec<TrackedEntry> {
             entry,
             status: EntryStatus::Unchanged,
             seen_at: now,
+            first_seen: None,
+            suspicious: Vec::new(),
+            container_name: None,
+            service_name: None,
         })
         .collect()
 }
