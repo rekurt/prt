@@ -30,28 +30,147 @@
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
-| **Live table** | Ports, services, protocols, states, PIDs, processes, users. Auto-refreshes every 2s |
-| **Change tracking** | New connections flash green; closed connections fade red for 5s |
-| **Suspicious detector** | `[!]` flags for non-root on privileged ports, scripts on sensitive ports |
-| **Process tree** | Full parent chain (e.g. `launchd → nginx → worker`) |
-| **Detail panel** | Tree / Network / Connection tabs for selected process (`1` `2` `3`) |
-| **Fullscreen views** | Chart (`4`), Topology (`5`), Process detail (`6`), Namespaces (`7`) |
-| **Search & filter** | By port, service, process name, PID, protocol, state, user. `!` = suspicious only |
-| **Sort** | By any column, ascending or descending |
-| **Kill** | Select a process → `K` → confirm with `y` (SIGTERM) or `f` (SIGKILL) |
-| **Firewall block** | `b` → block remote IP via iptables/pfctl with undo command |
-| **Strace attach** | `t` → live syscall tracing in a split panel |
-| **Sudo elevation** | Press `s`, enter password — see all system processes |
-| **Clipboard** | Copy full line (`c`) or just the PID (`p`) |
-| **Container awareness** | Shows Docker/Podman container name (auto-hides when not applicable) |
-| **Bandwidth** | System-wide RX/TX rate in the header |
-| **Export** | `prt --export json`, `prt --export csv`, `prt --json` (NDJSON streaming) |
-| **Watch mode** | `prt watch 3000 8080` — compact UP/DOWN monitor |
-| **Alert rules** | TOML config with bell/highlight on port, process, or connection count |
-| **Multilingual** | English, Russian, Chinese. Auto-detects locale, switch with `L` |
-| **Config** | `~/.config/prt/config.toml` — known port overrides, alert rules |
+### Live Table with Change Tracking
+
+The main view displays all active network connections in a sortable, filterable table. Columns include port, service name, protocol, state, PID, process name, and user. New connections flash **green**; closed connections fade **red** for 5 seconds before disappearing. The table auto-refreshes every 2 seconds.
+
+### Known Ports Database
+
+The `Service` column maps well-known port numbers to human-readable names — http (80), ssh (22), postgres (5432), and ~200 more. You can override or extend with custom names in `~/.config/prt/config.toml`:
+
+```toml
+[known_ports]
+3000 = "my-app"
+9090 = "prometheus"
+```
+
+### Connection Aging
+
+Every connection tracks its `first_seen` timestamp. ESTABLISHED connections older than 1 hour are highlighted yellow; older than 24 hours — red. CLOSE_WAIT connections are always red as they indicate potential resource leaks.
+
+### Suspicious Connection Detector
+
+Connections are scanned for anomalies and flagged with `[!]`:
+
+- **Non-root on privileged port** — a non-root process listening on port < 1024
+- **Script on sensitive port** — Python, Perl, Ruby, or Node.js listening on port 22, 80, or 443
+- **Root outgoing to high port** — root process with an established connection to a remote port > 1024
+
+Filter with `/` then type `!` to show only suspicious entries.
+
+### Container Awareness
+
+If Docker or Podman is running, the `Container` column shows which container owns each process. The column auto-hides when no containers are detected to save space. Resolution uses batched `docker ps` + `docker inspect` calls with a 2-second timeout to avoid blocking the TUI.
+
+### Bandwidth Estimation
+
+The header bar shows system-wide network throughput: `▼ 1.2 MB/s ▲ 340 KB/s`. Reads from `/proc/net/dev` on Linux or `netstat -ib` on macOS. Rates are calculated as deltas between refresh cycles.
+
+### Process Tree
+
+Press `Enter` or `d` to open the detail panel, then `1` to see the full parent chain for the selected process (e.g., `launchd → nginx → worker`). Built by traversing PPID relationships.
+
+### Detail Panel Tabs
+
+The bottom panel (toggle with `Enter`/`d`) has three tabs:
+
+| Tab | Key | Content |
+|-----|-----|---------|
+| **Tree** | `1` | Process parent chain |
+| **Network** | `2` | Interface details, IP addresses, MTU |
+| **Connection** | `3` | All connections for the selected PID |
+
+### Fullscreen Views
+
+Four dedicated views accessible with keys `4`-`7`:
+
+| View | Key | Description |
+|------|-----|-------------|
+| **Chart** | `4` | Horizontal bar chart showing connection count per process |
+| **Topology** | `5` | ASCII network graph: process → local port → remote host |
+| **Process Detail** | `6` | Comprehensive info page: CWD, CPU %, RSS, open files, environment variables, all connections, network interfaces, process tree |
+| **Namespaces** | `7` | Network namespace grouping (Linux only). Shows named namespaces from `/run/netns/` or raw inode numbers |
+
+All fullscreen views support scrolling with `j`/`k` and `g`/`G`. Press `Esc` to return to the table.
+
+### Firewall Quick-Block
+
+Press `b` on a connection with a remote address to block that IP. A confirmation dialog shows the exact command that will be executed:
+
+- **Linux:** `iptables -A INPUT -s <IP> -j DROP`
+- **macOS:** `pfctl -t prt_blocked -T add <IP>`
+
+The status bar shows the undo command after blocking. Requires sudo privileges.
+
+### Strace / Dtruss Attach
+
+Press `t` to attach a system call tracer to the selected process. The detail panel splits to show a live stream of network-related syscalls:
+
+- **Linux:** `strace -p <PID> -e trace=network -f`
+- **macOS:** `dtruss -p <PID>` (requires SIP disabled or root)
+
+Press `t` again to detach. The tracer process is automatically killed on exit.
+
+### Alert Rules
+
+Define rules in `~/.config/prt/config.toml` to get notified when specific conditions are met:
+
+```toml
+[[alerts]]
+port = 22
+action = "bell"        # terminal bell on new SSH connections
+
+[[alerts]]
+process = "python"
+state = "LISTEN"
+action = "highlight"   # highlight row in yellow
+
+[[alerts]]
+connections_gt = 100
+action = "bell"        # alert when a process exceeds 100 connections
+```
+
+Alerts fire only on NEW entries (not every refresh cycle). Available conditions: `port`, `process`, `state`, `connections_gt`. Actions: `bell`, `highlight`.
+
+### NDJSON Streaming
+
+```bash
+prt --json | jq '.process.name'
+```
+
+Outputs one JSON object per connection per refresh cycle to stdout. Handles SIGPIPE gracefully (no panics when piped to `head`). No TUI initialization — safe for scripts and pipelines.
+
+### Watch Mode
+
+```bash
+prt watch 3000 8080 5432
+```
+
+Compact non-TUI display showing UP/DOWN status for specific ports. Emits BEL (`\x07`) on state changes. Supports ANSI colors when connected to a TTY, plain text when piped.
+
+```
+:3000 ● UP   nginx (1234)   since 14:32:05
+:8080 ○ DOWN                 since 14:35:12
+:5432 ● UP   postgres (567)  since 14:32:05
+```
+
+### Export
+
+```bash
+prt --export json    # JSON snapshot of all connections
+prt --export csv     # CSV snapshot
+```
+
+### Multilingual Interface
+
+English, Russian, and Chinese. Language is resolved:
+
+1. `--lang en|ru|zh` CLI flag (highest priority)
+2. `PRT_LANG` environment variable
+3. System locale auto-detection
+4. English (fallback)
+
+Press `L` in the TUI to switch language at runtime — no restart needed.
 
 ## Install
 
@@ -154,17 +273,6 @@ connections_gt = 100
 action = "bell"
 ```
 
-## Language
-
-Language is resolved in this order:
-
-1. `--lang en|ru|zh` CLI flag (highest priority)
-2. `PRT_LANG` environment variable
-3. System locale auto-detection
-4. English (fallback)
-
-Press `L` in the TUI to switch language at runtime — no restart needed.
-
 ## Architecture
 
 ```
@@ -181,7 +289,7 @@ crates/
 │   │   ├── suspicious.rs      # Suspicious connection heuristics
 │   │   ├── bandwidth.rs       # System-wide RX/TX rate tracking
 │   │   ├── container.rs       # Docker/Podman container resolution
-│   │   ├── history.rs         # Connection count sparkline history
+│   │   ├── history.rs         # Connection count history (internal)
 │   │   ├── namespace.rs       # Network namespace grouping (Linux)
 │   │   ├── process_detail.rs  # CWD, env, files, CPU, RSS
 │   │   └── firewall.rs        # iptables/pfctl block/unblock
@@ -195,8 +303,7 @@ crates/
     ├── input.rs               # Key dispatch by view mode
     ├── stream.rs              # NDJSON streaming mode
     ├── watch.rs               # Port watch mode
-    ├── tracer.rs              # Strace/dtruss session management
-    └── forward.rs             # SSH tunnel manager
+    └── tracer.rs              # Strace/dtruss session management
 ```
 
 **Data flow:**

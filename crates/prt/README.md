@@ -22,6 +22,8 @@ cargo install prt
 |---------|-------------|
 | **Live table** | Ports, services, protocols, states, PIDs, processes, users. Auto-refreshes every 2s |
 | **Change tracking** | New connections green; closed fade red for 5s |
+| **Known ports** | Service column with ~200 built-in names + config overrides |
+| **Connection aging** | Color-coded by age (>1h yellow, >24h red, CLOSE_WAIT always red) |
 | **Suspicious detector** | `[!]` flags for non-root on privileged ports, scripts on sensitive ports |
 | **Process tree** | Full parent chain (e.g. `launchd → nginx → worker`) |
 | **Detail panel** | Tree / Network / Connection tabs (`1` `2` `3`) |
@@ -29,14 +31,14 @@ cargo install prt
 | **Search & filter** | By port, service, process, PID, protocol, state, user. `!` = suspicious |
 | **Kill** | Select → `K` → `y` (SIGTERM) or `f` (SIGKILL) |
 | **Firewall block** | `b` → block remote IP with undo command |
-| **Strace** | `t` → live syscall tracing |
-| **Containers** | Docker/Podman container name column |
+| **Strace** | `t` → live syscall tracing in split panel |
+| **Containers** | Docker/Podman container name column (auto-hides) |
 | **Bandwidth** | System-wide RX/TX in header |
 | **Export** | `--export json/csv`, `--json` (NDJSON stream) |
-| **Watch mode** | `prt watch 80 443` — compact UP/DOWN |
+| **Watch mode** | `prt watch 80 443` — compact UP/DOWN with BEL alerts |
 | **Alerts** | TOML config: bell/highlight on port, process, connection count |
 | **Multilingual** | English, Russian, Chinese. Switch with `L` |
-| **Config** | `~/.config/prt/config.toml` |
+| **Config** | `~/.config/prt/config.toml` — port overrides, alert rules |
 
 ## Usage
 
@@ -67,6 +69,12 @@ sudo prt                # run as root
 crates/
 ├── prt-core/    # Core library: scanner, tracker, alerts, known ports, i18n, platform
 └── prt/         # TUI binary (ratatui + crossterm + clap)
+    ├── app.rs       # App state, main loop, caching
+    ├── ui.rs        # ViewMode-based rendering
+    ├── input.rs     # Key dispatch
+    ├── stream.rs    # NDJSON streaming mode
+    ├── watch.rs     # Port watch mode
+    └── tracer.rs    # Strace/dtruss session management
 ```
 
 ## License

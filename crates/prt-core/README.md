@@ -12,7 +12,7 @@ Core library for [**prt**](https://crates.io/crates/prt) — a real-time network
 
 - **Scanning** network ports (TCP/UDP) via `lsof` on macOS or `/proc` on Linux
 - **Tracking** connection changes over time (New → Unchanged → Gone) with `first_seen` aging
-- **Enrichment** — known port names, suspicious connection detection, container awareness
+- **Enrichment** — known port names (~200 built-in + user overrides), suspicious connection detection, container awareness
 - **Filtering** by port, PID, process name, service, protocol, state, user, or `!` (suspicious)
 - **Sorting** by any column, ascending or descending
 - **Exporting** to JSON or CSV
@@ -42,7 +42,7 @@ platform::scan_ports()
 | Platform | Method | Performance |
 |----------|--------|-------------|
 | **macOS** | `lsof -F` structured output | 2 batch `ps` calls per cycle |
-| **Linux** | `/proc/net/` via `procfs` crate | Zero subprocess overhead |
+| **Linux** | `/proc/net/tcp`, `/proc/net/udp` via `procfs` crate | Zero subprocess overhead |
 
 ## Quick start
 
@@ -80,18 +80,17 @@ for entry in &session.entries {
 |--------|-------------|
 | `model` | Core types: PortEntry, TrackedEntry, ViewMode, DetailTab, SortState |
 | `core::scanner` | Scan, diff, sort, filter, export |
-| `core::session` | Refresh cycle state machine |
-| `core::alerts` | Alert rule evaluation |
-| `core::suspicious` | Suspicious connection heuristics |
-| `core::bandwidth` | System-wide RX/TX rate |
-| `core::container` | Docker/Podman resolution |
-| `core::history` | Connection count sparkline |
+| `core::session` | Refresh cycle state machine with enrichment pipeline |
+| `core::alerts` | Alert rule evaluation (port, process, state, connections_gt) |
+| `core::suspicious` | Suspicious connection heuristics (3 rules) |
+| `core::bandwidth` | System-wide RX/TX rate (Linux: /proc/net/dev, macOS: netstat -ib) |
+| `core::container` | Docker/Podman resolution via batched CLI calls |
 | `core::namespace` | Linux network namespace grouping |
-| `core::process_detail` | CWD, env, files, CPU, RSS |
-| `core::firewall` | iptables/pfctl commands |
+| `core::process_detail` | CWD, env, open files, CPU %, RSS |
+| `core::firewall` | iptables/pfctl block/unblock command generation |
 | `core::killer` | SIGTERM / SIGKILL |
-| `known_ports` | Port → service name database |
-| `config` | TOML config loading |
+| `known_ports` | Port → service name database (~200 entries + config overrides) |
+| `config` | TOML config loading (known_ports, alert rules) |
 | `i18n` | EN / RU / ZH runtime switching |
 | `platform` | macOS (lsof) / Linux (/proc) |
 

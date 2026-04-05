@@ -15,7 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Suspicious connection detector — `[!]` tag for non-root on privileged ports, scripting languages on sensitive ports, root outgoing to high ports; filter with `!`
 - Container awareness — shows Docker/Podman container name per process (column auto-hides when no containers detected)
 - Bandwidth estimation — system-wide RX/TX rate in header bar (Linux: `/proc/net/dev`, macOS: `netstat -ib`)
-- Sparkline history — per-connection trend mini-chart (visible at terminal width >140)
 
 **New Views (fullscreen, press 4-7):**
 - Chart view (`4`) — horizontal bar chart of connections per process
@@ -26,7 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **New Actions:**
 - Firewall quick-block (`b`) — block remote IP via iptables/pfctl with confirmation dialog and undo command
 - Strace/dtruss attach (`t`) — live syscall tracing in split panel with auto-detach
-- SSH port forwarding (`f`) — tunnel manager with health monitoring
 
 **New CLI Modes:**
 - `prt --json` — NDJSON streaming mode for scripting/piping
