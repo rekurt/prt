@@ -32,17 +32,26 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Live table** | Ports, protocols, states, PIDs, processes, users. Auto-refreshes every 2s |
+| **Live table** | Ports, services, protocols, states, PIDs, processes, users. Auto-refreshes every 2s |
 | **Change tracking** | New connections flash green; closed connections fade red for 5s |
-| **Process tree** | See the full parent chain (e.g. `launchd → nginx → worker`) |
-| **Detail tabs** | Tree / Network / Connection — toggle with `1` `2` `3` |
-| **Search & filter** | Fuzzy search by port, process name, PID, protocol, state, user |
+| **Suspicious detector** | `[!]` flags for non-root on privileged ports, scripts on sensitive ports |
+| **Process tree** | Full parent chain (e.g. `launchd → nginx → worker`) |
+| **Detail panel** | Tree / Network / Connection tabs for selected process (`1` `2` `3`) |
+| **Fullscreen views** | Chart (`4`), Topology (`5`), Process detail (`6`), Namespaces (`7`) |
+| **Search & filter** | By port, service, process name, PID, protocol, state, user. `!` = suspicious only |
 | **Sort** | By any column, ascending or descending |
 | **Kill** | Select a process → `K` → confirm with `y` (SIGTERM) or `f` (SIGKILL) |
+| **Firewall block** | `b` → block remote IP via iptables/pfctl with undo command |
+| **Strace attach** | `t` → live syscall tracing in a split panel |
 | **Sudo elevation** | Press `s`, enter password — see all system processes |
 | **Clipboard** | Copy full line (`c`) or just the PID (`p`) |
-| **Export** | `prt --export json` or `prt --export csv` for scripting |
-| **Multilingual** | English, Russian, Chinese. Auto-detects locale, switch with `L` in TUI |
+| **Container awareness** | Shows Docker/Podman container name (auto-hides when not applicable) |
+| **Bandwidth** | System-wide RX/TX rate in the header |
+| **Export** | `prt --export json`, `prt --export csv`, `prt --json` (NDJSON streaming) |
+| **Watch mode** | `prt watch 3000 8080` — compact UP/DOWN monitor |
+| **Alert rules** | TOML config with bell/highlight on port, process, or connection count |
+| **Multilingual** | English, Russian, Chinese. Auto-detects locale, switch with `L` |
+| **Config** | `~/.config/prt/config.toml` — known port overrides, alert rules |
 
 ## Install
 
@@ -68,25 +77,82 @@ make install    # or: cargo install --path crates/prt
 ```bash
 prt                     # launch TUI
 prt --lang ru           # Russian interface
-prt --lang zh           # Chinese interface
 prt --export json       # export snapshot to JSON
 prt --export csv        # export snapshot to CSV
-PRT_LANG=ru prt         # set language via environment
+prt --json              # NDJSON streaming to stdout
+prt watch 80 443 5432   # compact port watch mode
 sudo prt                # run as root (see all processes)
 ```
 
 ## Keyboard Shortcuts
 
-| Key | Action | | Key | Action |
-|-----|--------|-|-----|--------|
-| `q` | Quit | | `K` / `Del` | Kill process |
-| `?` | Help | | `c` | Copy line |
-| `/` | Search | | `p` | Copy PID |
-| `Esc` | Clear filter | | `Tab` | Next sort column |
-| `r` | Refresh | | `Shift+Tab` | Reverse sort |
-| `s` | Sudo prompt | | `L` | Cycle language |
-| `j`/`k` `↑`/`↓` | Navigate | | `1` `2` `3` | Detail tabs |
-| `g` / `G` | Top / bottom | | `Enter` / `d` | Toggle details |
+**Navigation:**
+
+| Key | Action |
+|-----|--------|
+| `j`/`k` `↑`/`↓` | Move selection / scroll |
+| `g` / `G` | Jump to top / bottom |
+| `/` | Search & filter (`!` = suspicious only) |
+| `Esc` | Back to table / clear filter |
+| `q` | Quit |
+
+**Bottom panel (Table mode):**
+
+| Key | Action |
+|-----|--------|
+| `Enter` / `d` | Toggle detail panel |
+| `1` `2` `3` | Tree / Network / Connection tab |
+| `←`/`→` `h`/`l` | Switch detail tab |
+
+**Fullscreen views:**
+
+| Key | Action |
+|-----|--------|
+| `4` | Chart — connections per process |
+| `5` | Topology — process → port → remote |
+| `6` | Process detail — info, files, env |
+| `7` | Namespaces (Linux only) |
+
+**Actions:**
+
+| Key | Action |
+|-----|--------|
+| `K` / `Del` | Kill process |
+| `c` | Copy line to clipboard |
+| `p` | Copy PID to clipboard |
+| `b` | Block remote IP (firewall) |
+| `t` | Attach/detach strace |
+| `r` | Refresh |
+| `s` | Sudo prompt |
+| `Tab` | Next sort column |
+| `Shift+Tab` | Reverse sort direction |
+| `L` | Cycle language |
+| `?` | Help |
+
+## Configuration
+
+Create `~/.config/prt/config.toml`:
+
+```toml
+# Override known port names
+[known_ports]
+3000 = "my-app"
+9090 = "prometheus"
+
+# Alert rules
+[[alerts]]
+port = 22
+action = "bell"
+
+[[alerts]]
+process = "python"
+state = "LISTEN"
+action = "highlight"
+
+[[alerts]]
+connections_gt = 100
+action = "bell"
+```
 
 ## Language
 
@@ -104,27 +170,46 @@ Press `L` in the TUI to switch language at runtime — no restart needed.
 ```
 crates/
 ├── prt-core/                  # Core library (platform-independent)
-│   ├── model.rs               # PortEntry, TrackedEntry, SortState, enums
+│   ├── model.rs               # PortEntry, TrackedEntry, ViewMode, DetailTab, enums
+│   ├── config.rs              # TOML config loading (~/.config/prt/)
+│   ├── known_ports.rs         # Well-known port → service name database
 │   ├── core/
 │   │   ├── scanner.rs         # scan → diff → sort → filter → export
+│   │   ├── session.rs         # Refresh cycle state machine
 │   │   ├── killer.rs          # SIGTERM / SIGKILL
-│   │   └── session.rs         # Refresh cycle state machine
+│   │   ├── alerts.rs          # Alert rule evaluation
+│   │   ├── suspicious.rs      # Suspicious connection heuristics
+│   │   ├── bandwidth.rs       # System-wide RX/TX rate tracking
+│   │   ├── container.rs       # Docker/Podman container resolution
+│   │   ├── history.rs         # Connection count sparkline history
+│   │   ├── namespace.rs       # Network namespace grouping (Linux)
+│   │   ├── process_detail.rs  # CWD, env, files, CPU, RSS
+│   │   └── firewall.rs        # iptables/pfctl block/unblock
 │   ├── i18n/                  # EN / RU / ZH, AtomicU8-backed runtime switching
 │   └── platform/
 │       ├── macos.rs           # lsof + batch ps (2 calls/cycle)
 │       └── linux.rs           # /proc via procfs
 └── prt/                       # TUI binary (ratatui + crossterm + clap)
+    ├── app.rs                 # App state, main loop, caching
+    ├── ui.rs                  # ViewMode-based rendering, fullscreen views
+    ├── input.rs               # Key dispatch by view mode
+    ├── stream.rs              # NDJSON streaming mode
+    ├── watch.rs               # Port watch mode
+    ├── tracer.rs              # Strace/dtruss session management
+    └── forward.rs             # SSH tunnel manager
 ```
 
 **Data flow:**
 
 ```
 platform::scan_ports() → Session::refresh()
-    → diff_entries()        New / Unchanged / Gone
+    → diff_entries()        New / Unchanged / Gone (with first_seen carry-forward)
     → retain()              remove Gone after 5s
+    → enrich()              service names, suspicious flags, containers
     → sort_entries()        by current SortState
     → filter_indices()      user's search query
-    → UI renders
+    → alerts::evaluate()    fire bell/highlight alerts
+    → UI renders            ViewMode-based routing
 ```
 
 | Platform | Method | Performance |
@@ -135,10 +220,11 @@ platform::scan_ports() → Session::refresh()
 ## Development
 
 ```bash
-make check          # fmt + clippy + test (79 tests)
-make bench          # criterion benchmarks
-make doc-open       # generate and open rustdoc
-make test-verbose   # tests with stdout
+cargo build --workspace          # build everything
+cargo test --workspace           # run all tests (188 tests)
+cargo clippy --workspace         # lint
+cargo fmt --all -- --check       # format check
+cargo bench -p prt-core          # criterion benchmarks
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

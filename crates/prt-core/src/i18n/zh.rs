@@ -14,6 +14,11 @@ pub static STRINGS: Strings = Strings {
     tab_connection: "连接",
     no_selected_process: " 未选择进程",
 
+    view_chart: "图表",
+    view_topology: "拓扑",
+    view_process: "进程详情",
+    view_namespaces: "命名空间",
+
     process_not_found: "未找到进程",
 
     iface_address: "  地址:       ",
@@ -36,18 +41,35 @@ pub static STRINGS: Strings = Strings {
   快捷键:
   q            退出
   ?            帮助
-  /            搜索 / 过滤
-  Esc          清除过滤
+  /            搜索 / 过滤 (! = 可疑连接)
+  Esc          返回表格 / 清除过滤
   r            刷新
   s            输入sudo密码
-  j/k 上/下    导航
+
+  导航:
+  j/k 上/下    移动选择
   g/G          跳到开头 / 结尾
-  Enter/d      显示/隐藏详情
-  1/2/3        切换标签页
-  左/右 h/l    切换标签页
+
+  底部面板 (表格模式):
+  Enter/d      显示/隐藏详情面板
+  1/2/3        进程树 / 网络 / 连接
+  左/右        切换标签页
+  h/l          切换标签页
+
+  全屏模式:
+  4            图表 (每进程连接数)
+  5            拓扑 (进程 → 端口 → 远程)
+  6            进程详情 (信息、文件、环境变量)
+  7            命名空间 (仅Linux)
+
+  操作:
   K/Del        终止进程
-  c            复制行
-  p            复制PID
+  c            复制行到剪贴板
+  p            复制PID到剪贴板
+  b            封锁远程IP (防火墙)
+  t            附加/分离 strace
+
+  表格:
   Tab          下一排序列
   Shift+Tab    反转排序方向
   L            切换语言
@@ -73,6 +95,16 @@ pub static STRINGS: Strings = Strings {
     hint_sudo: "sudo",
     hint_quit: "退出",
     hint_lang: "语言",
+
+    hint_back: "返回",
+    hint_details: "详情",
+    hint_views: "视图",
+    hint_sort: "排序",
+    hint_copy: "复制",
+    hint_block: "封锁IP",
+    hint_trace: "跟踪",
+    hint_navigate: "导航",
+    hint_tabs: "标签",
 
     lang_switched: "语言已切换",
 

@@ -1,7 +1,7 @@
 [package]
 name = "prt"
-version = "0.2.0"
-description = "Real-time terminal UI for monitoring network ports — interactive alternative to lsof/ss with colors, filtering and process trees"
+version = "0.3.0"
+description = "Real-time terminal UI for monitoring network ports — interactive alternative to lsof/ss with alerts, firewall blocking, strace, container awareness and process trees"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -18,7 +18,9 @@ path = "src/main.rs"
 [dependencies]
 prt-core.workspace = true
 anyhow.workspace = true
+serde_json.workspace = true
 clap.workspace = true
 arboard.workspace = true
+nix.workspace = true
 ratatui = "0.29"
 crossterm = "0.28"

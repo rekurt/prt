@@ -11,21 +11,31 @@ Core library for [**prt**](https://crates.io/crates/prt) — a real-time network
 `prt-core` provides platform-independent logic for:
 
 - **Scanning** network ports (TCP/UDP) via `lsof` on macOS or `/proc` on Linux
-- **Tracking** connection changes over time (New → Unchanged → Gone)
-- **Filtering** by port, PID, process name, protocol, state, or user
+- **Tracking** connection changes over time (New → Unchanged → Gone) with `first_seen` aging
+- **Enrichment** — known port names, suspicious connection detection, container awareness
+- **Filtering** by port, PID, process name, service, protocol, state, user, or `!` (suspicious)
 - **Sorting** by any column, ascending or descending
 - **Exporting** to JSON or CSV
 - **Killing** processes by PID (SIGTERM / SIGKILL)
-- **i18n** — runtime-switchable localization (English, Russian, Chinese)
+- **Alerts** — configurable rules with bell/highlight actions
+- **Firewall** — generate iptables/pfctl block/unblock commands
+- **Bandwidth** — system-wide RX/TX rate tracking
+- **Containers** — Docker/Podman container name resolution
+- **Namespaces** — Linux network namespace grouping
+- **Process detail** — CWD, environment, open files, CPU, RSS
+- **i18n** — runtime-switchable localization (English, Russian, Chinese) backed by `AtomicU8`
+- **Config** — TOML-based configuration from `~/.config/prt/`
 
 ## Architecture
 
 ```text
 platform::scan_ports()
     → Session::refresh()
-        → scanner::diff_entries()   (New / Unchanged / Gone)
+        → scanner::diff_entries()   (New / Unchanged / Gone + first_seen carry-forward)
+        → enrich: service names, suspicious flags, containers
         → scanner::sort_entries()
         → scanner::filter_indices()
+        → alerts::evaluate()
     → UI renders
 ```
 
@@ -56,9 +66,34 @@ let mut session = Session::new();
 session.refresh().expect("refresh failed");
 
 for entry in &session.entries {
-    println!("{} :{} ({})", entry.entry.process_name, entry.entry.local_addr.port(), entry.status);
+    println!(":{} {} (PID {}) {:?}",
+        entry.entry.local_port(),
+        entry.entry.process.name,
+        entry.entry.process.pid,
+        entry.status);
 }
 ```
+
+## Modules
+
+| Module | Description |
+|--------|-------------|
+| `model` | Core types: PortEntry, TrackedEntry, ViewMode, DetailTab, SortState |
+| `core::scanner` | Scan, diff, sort, filter, export |
+| `core::session` | Refresh cycle state machine |
+| `core::alerts` | Alert rule evaluation |
+| `core::suspicious` | Suspicious connection heuristics |
+| `core::bandwidth` | System-wide RX/TX rate |
+| `core::container` | Docker/Podman resolution |
+| `core::history` | Connection count sparkline |
+| `core::namespace` | Linux network namespace grouping |
+| `core::process_detail` | CWD, env, files, CPU, RSS |
+| `core::firewall` | iptables/pfctl commands |
+| `core::killer` | SIGTERM / SIGKILL |
+| `known_ports` | Port → service name database |
+| `config` | TOML config loading |
+| `i18n` | EN / RU / ZH runtime switching |
+| `platform` | macOS (lsof) / Linux (/proc) |
 
 ## i18n
 
@@ -67,11 +102,8 @@ use prt_core::i18n::{set_lang, strings, Lang};
 
 set_lang(Lang::Zh);
 let s = strings();
-println!("{}", s.app_name); // "PRT"
 println!("{}", s.hint_quit); // "退出"
 ```
-
-Language resolution: `--lang` flag → `PRT_LANG` env → system locale → English.
 
 ## Platform support
 

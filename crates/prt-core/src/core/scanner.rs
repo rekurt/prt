@@ -12,8 +12,8 @@ use crate::i18n;
 use crate::model::{EntryStatus, ExportFormat, PortEntry, SortColumn, SortState, TrackedEntry};
 use crate::platform;
 use anyhow::Result;
-use std::collections::HashSet;
-use std::time::Instant;
+use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 /// Scan all network ports visible to the current user.
 pub fn scan() -> Result<Vec<PortEntry>> {
@@ -51,25 +51,33 @@ pub fn diff_entries(
         .map(|e| (e.local_port(), e.process.pid))
         .collect();
 
-    let prev_keys: HashSet<(u16, u32)> = prev
+    // HashMap for O(1) lookup + carry-forward of first_seen from prev entries.
+    let prev_map: HashMap<(u16, u32), &TrackedEntry> = prev
         .iter()
         .filter(|e| e.status != EntryStatus::Gone)
-        .map(|e| (e.entry.local_port(), e.entry.process.pid))
+        .map(|e| ((e.entry.local_port(), e.entry.process.pid), e))
         .collect();
 
     let mut result: Vec<TrackedEntry> = current
         .into_iter()
         .map(|entry| {
             let key = (entry.local_port(), entry.process.pid);
-            let status = if prev_keys.contains(&key) {
-                EntryStatus::Unchanged
+            let (status, first_seen) = if let Some(prev_e) = prev_map.get(&key) {
+                // Carry forward first_seen; if prev had None (pre-upgrade),
+                // start counting from now so aging kicks in eventually.
+                (EntryStatus::Unchanged, prev_e.first_seen.or(Some(now)))
             } else {
-                EntryStatus::New
+                // New entry — first_seen is now
+                (EntryStatus::New, Some(now))
             };
             TrackedEntry {
                 entry,
                 status,
                 seen_at: now,
+                first_seen,
+                suspicious: Vec::new(),
+                container_name: None,
+                service_name: None,
             }
         })
         .collect();
@@ -81,6 +89,12 @@ pub fn diff_entries(
                 entry: prev_entry.entry.clone(),
                 status: EntryStatus::Gone,
                 seen_at: now,
+                first_seen: prev_entry.first_seen,
+                // Carry forward enrichment data so Gone entries retain
+                // their [!] tags and service names during the retention window.
+                suspicious: prev_entry.suspicious.clone(),
+                container_name: prev_entry.container_name.clone(),
+                service_name: prev_entry.service_name.clone(),
             });
         }
     }
@@ -88,11 +102,33 @@ pub fn diff_entries(
     result
 }
 
+/// Format a duration as a human-readable short string.
+///
+/// Examples: "0s", "45s", "5m", "2h", "3d"
+pub fn format_duration(d: Duration) -> String {
+    let secs = d.as_secs();
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else if secs < 86400 {
+        format!("{}h", secs / 3600)
+    } else {
+        format!("{}d", secs / 86400)
+    }
+}
+
 /// Sort entries in-place by the given column and direction.
 pub fn sort_entries(entries: &mut [TrackedEntry], state: &SortState) {
     entries.sort_by(|a, b| {
         let cmp = match state.column {
             SortColumn::Port => a.entry.local_port().cmp(&b.entry.local_port()),
+            SortColumn::Service => {
+                // Sort None (unknown service) after all named services
+                let a_s = a.service_name.as_deref().unwrap_or("\u{FFFF}");
+                let b_s = b.service_name.as_deref().unwrap_or("\u{FFFF}");
+                a_s.cmp(b_s)
+            }
             SortColumn::Protocol => a.entry.protocol.cmp(&b.entry.protocol),
             SortColumn::State => a.entry.state.cmp(&b.entry.state),
             SortColumn::Pid => a.entry.process.pid.cmp(&b.entry.process.pid),
@@ -112,6 +148,11 @@ pub fn sort_entries(entries: &mut [TrackedEntry], state: &SortState) {
 /// Matches against: port number, process name, PID, protocol, state, user.
 /// All comparisons are case-insensitive.
 fn matches_query(e: &TrackedEntry, q: &str) -> bool {
+    // Special filter: "!" shows only suspicious entries
+    if q == "!" {
+        return !e.suspicious.is_empty();
+    }
+
     e.entry.local_port().to_string().contains(q)
         || e.entry.process.name.to_lowercase().contains(q)
         || e.entry.process.pid.to_string().contains(q)
@@ -120,6 +161,11 @@ fn matches_query(e: &TrackedEntry, q: &str) -> bool {
         || e.entry
             .process
             .user
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains(q)
+        || e.service_name
             .as_deref()
             .unwrap_or("")
             .to_lowercase()
@@ -342,6 +388,24 @@ mod tests {
             entry: make_entry(port, pid, name),
             status,
             seen_at: Instant::now(),
+            first_seen: None,
+            suspicious: Vec::new(),
+            container_name: None,
+            service_name: None,
+        }
+    }
+
+    /// Create a TrackedEntry with a custom PortEntry (for sort/filter tests
+    /// that need non-default protocol/state/user).
+    fn make_tracked_custom(entry: PortEntry, status: EntryStatus) -> TrackedEntry {
+        TrackedEntry {
+            entry,
+            status,
+            seen_at: Instant::now(),
+            first_seen: None,
+            suspicious: Vec::new(),
+            container_name: None,
+            service_name: None,
         }
     }
 
@@ -502,16 +566,14 @@ mod tests {
     #[test]
     fn sort_by_protocol() {
         let mut entries = vec![
-            TrackedEntry {
-                entry: make_entry_full(80, 1, "a", Protocol::Udp, ConnectionState::Unknown, None),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
-            TrackedEntry {
-                entry: make_entry_full(443, 2, "b", Protocol::Tcp, ConnectionState::Listen, None),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
+            make_tracked_custom(
+                make_entry_full(80, 1, "a", Protocol::Udp, ConnectionState::Unknown, None),
+                EntryStatus::Unchanged,
+            ),
+            make_tracked_custom(
+                make_entry_full(443, 2, "b", Protocol::Tcp, ConnectionState::Listen, None),
+                EntryStatus::Unchanged,
+            ),
         ];
         sort_entries(
             &mut entries,
@@ -527,8 +589,8 @@ mod tests {
     #[test]
     fn sort_by_user() {
         let mut entries = vec![
-            TrackedEntry {
-                entry: make_entry_full(
+            make_tracked_custom(
+                make_entry_full(
                     80,
                     1,
                     "a",
@@ -536,11 +598,10 @@ mod tests {
                     ConnectionState::Listen,
                     Some("zoe"),
                 ),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
-            TrackedEntry {
-                entry: make_entry_full(
+                EntryStatus::Unchanged,
+            ),
+            make_tracked_custom(
+                make_entry_full(
                     443,
                     2,
                     "b",
@@ -548,9 +609,8 @@ mod tests {
                     ConnectionState::Listen,
                     Some("alice"),
                 ),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
+                EntryStatus::Unchanged,
+            ),
         ];
         sort_entries(
             &mut entries,
@@ -613,16 +673,14 @@ mod tests {
     #[test]
     fn filter_by_protocol() {
         let entries = vec![
-            TrackedEntry {
-                entry: make_entry_full(80, 1, "a", Protocol::Tcp, ConnectionState::Listen, None),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
-            TrackedEntry {
-                entry: make_entry_full(53, 2, "b", Protocol::Udp, ConnectionState::Unknown, None),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
+            make_tracked_custom(
+                make_entry_full(80, 1, "a", Protocol::Tcp, ConnectionState::Listen, None),
+                EntryStatus::Unchanged,
+            ),
+            make_tracked_custom(
+                make_entry_full(53, 2, "b", Protocol::Udp, ConnectionState::Unknown, None),
+                EntryStatus::Unchanged,
+            ),
         ];
         assert_eq!(filter_entries(&entries, "udp").len(), 1);
         assert_eq!(filter_entries(&entries, "tcp").len(), 1);
@@ -631,13 +689,12 @@ mod tests {
     #[test]
     fn filter_by_state() {
         let entries = vec![
-            TrackedEntry {
-                entry: make_entry_full(80, 1, "a", Protocol::Tcp, ConnectionState::Listen, None),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
-            TrackedEntry {
-                entry: make_entry_full(
+            make_tracked_custom(
+                make_entry_full(80, 1, "a", Protocol::Tcp, ConnectionState::Listen, None),
+                EntryStatus::Unchanged,
+            ),
+            make_tracked_custom(
+                make_entry_full(
                     81,
                     2,
                     "b",
@@ -645,9 +702,8 @@ mod tests {
                     ConnectionState::Established,
                     None,
                 ),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
+                EntryStatus::Unchanged,
+            ),
         ];
         assert_eq!(filter_entries(&entries, "listen").len(), 1);
         assert_eq!(filter_entries(&entries, "established").len(), 1);
@@ -656,8 +712,8 @@ mod tests {
     #[test]
     fn filter_by_user() {
         let entries = vec![
-            TrackedEntry {
-                entry: make_entry_full(
+            make_tracked_custom(
+                make_entry_full(
                     80,
                     1,
                     "a",
@@ -665,11 +721,10 @@ mod tests {
                     ConnectionState::Listen,
                     Some("root"),
                 ),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
-            TrackedEntry {
-                entry: make_entry_full(
+                EntryStatus::Unchanged,
+            ),
+            make_tracked_custom(
+                make_entry_full(
                     81,
                     2,
                     "b",
@@ -677,9 +732,8 @@ mod tests {
                     ConnectionState::Listen,
                     Some("www-data"),
                 ),
-                status: EntryStatus::Unchanged,
-                seen_at: Instant::now(),
-            },
+                EntryStatus::Unchanged,
+            ),
         ];
         assert_eq!(filter_entries(&entries, "root").len(), 1);
         assert_eq!(filter_entries(&entries, "www").len(), 1);
@@ -689,6 +743,20 @@ mod tests {
     fn filter_no_match_returns_empty() {
         let entries = vec![make_tracked(80, 1, "nginx", EntryStatus::Unchanged)];
         assert_eq!(filter_entries(&entries, "zzz_no_match").len(), 0);
+    }
+
+    #[test]
+    fn filter_bang_shows_only_suspicious() {
+        use crate::model::SuspiciousReason;
+        let mut suspicious_entry = make_tracked(80, 1, "python3", EntryStatus::Unchanged);
+        suspicious_entry
+            .suspicious
+            .push(SuspiciousReason::ScriptOnSensitive);
+        let clean_entry = make_tracked(8080, 2, "nginx", EntryStatus::Unchanged);
+        let entries = vec![suspicious_entry, clean_entry];
+        let filtered = filter_entries(&entries, "!");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].entry.process.name, "python3");
     }
 
     #[test]
@@ -827,6 +895,94 @@ mod tests {
         let addr: SocketAddr = "[::]:80".parse().unwrap();
         let result = resolve_interface(&addr);
         assert!(!result.is_empty());
+    }
+
+    // ── diff_entries: first_seen carry-forward ─────────────────────
+
+    #[test]
+    fn diff_new_entry_gets_first_seen() {
+        let now = Instant::now();
+        let result = diff_entries(&[], vec![make_entry(80, 1, "nginx")], now);
+        assert_eq!(result[0].first_seen, Some(now));
+    }
+
+    #[test]
+    fn diff_unchanged_carries_first_seen_forward() {
+        let original_time = Instant::now();
+        let mut prev = make_tracked(80, 1, "nginx", EntryStatus::Unchanged);
+        prev.first_seen = Some(original_time);
+
+        let later = original_time + Duration::from_secs(10);
+        let result = diff_entries(&[prev], vec![make_entry(80, 1, "nginx")], later);
+        assert_eq!(result[0].status, EntryStatus::Unchanged);
+        assert_eq!(result[0].first_seen, Some(original_time));
+    }
+
+    #[test]
+    fn diff_gone_preserves_first_seen() {
+        let original_time = Instant::now();
+        let mut prev = make_tracked(80, 1, "nginx", EntryStatus::Unchanged);
+        prev.first_seen = Some(original_time);
+
+        let later = original_time + Duration::from_secs(10);
+        let result = diff_entries(&[prev], vec![], later);
+        assert_eq!(result[0].status, EntryStatus::Gone);
+        assert_eq!(result[0].first_seen, Some(original_time));
+    }
+
+    #[test]
+    fn sort_by_service_none_sorts_last() {
+        let mut entries = vec![
+            make_tracked(80, 1, "nginx", EntryStatus::Unchanged),
+            make_tracked(9999, 2, "custom", EntryStatus::Unchanged),
+            make_tracked(443, 3, "nginx", EntryStatus::Unchanged),
+        ];
+        entries[0].service_name = Some("http".into());
+        entries[1].service_name = None; // unknown
+        entries[2].service_name = Some("https".into());
+        sort_entries(
+            &mut entries,
+            &SortState {
+                column: SortColumn::Service,
+                ascending: true,
+            },
+        );
+        // Named services first, None last
+        assert_eq!(entries[0].service_name.as_deref(), Some("http"));
+        assert_eq!(entries[1].service_name.as_deref(), Some("https"));
+        assert_eq!(entries[2].service_name, None);
+    }
+
+    #[test]
+    fn diff_unchanged_with_none_first_seen_gets_now() {
+        // Simulates pre-upgrade entry with first_seen = None
+        let mut prev = make_tracked(80, 1, "nginx", EntryStatus::Unchanged);
+        prev.first_seen = None; // pre-upgrade: no first_seen
+
+        let now = Instant::now();
+        let result = diff_entries(&[prev], vec![make_entry(80, 1, "nginx")], now);
+        assert_eq!(result[0].status, EntryStatus::Unchanged);
+        // Should fill in `now` rather than leaving None forever
+        assert_eq!(result[0].first_seen, Some(now));
+    }
+
+    // ── format_duration ──────────────────────────────────────────
+
+    #[test]
+    fn format_duration_table() {
+        let cases = [
+            (Duration::from_secs(0), "0s"),
+            (Duration::from_secs(45), "45s"),
+            (Duration::from_secs(60), "1m"),
+            (Duration::from_secs(300), "5m"),
+            (Duration::from_secs(3600), "1h"),
+            (Duration::from_secs(7200), "2h"),
+            (Duration::from_secs(86400), "1d"),
+            (Duration::from_secs(259200), "3d"),
+        ];
+        for (dur, expected) in cases {
+            assert_eq!(format_duration(dur), expected, "duration {:?}", dur);
+        }
     }
 
     // ── build_process_tree ────────────────────────────────────────
