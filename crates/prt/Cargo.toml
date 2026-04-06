@@ -1,6 +1,6 @@
 [package]
 name = "prt"
-version = "0.3.0"
+version.workspace = true
 description = "Real-time terminal UI for monitoring network ports — interactive alternative to lsof/ss with alerts, firewall blocking, strace, container awareness and process trees"
 edition.workspace = true
 license.workspace = true

@@ -27,7 +27,7 @@ impl From<CliExportFormat> for ExportFormat {
 }
 
 #[derive(Parser)]
-#[command(name = "prt", about = "Network port monitor")]
+#[command(name = "prt", about = "Network port monitor", version)]
 struct Cli {
     /// Export and exit (json or csv)
     #[arg(long, value_enum)]
