@@ -222,26 +222,42 @@ pub fn export(entries: &[PortEntry], format: ExportFormat) -> Result<String> {
                     "cmdline",
                 ])?;
                 for e in entries {
+                    let process_name = sanitize_csv_cell(&e.process.name);
+                    let user = sanitize_csv_cell(e.process.user.as_deref().unwrap_or(""));
+                    let parent_name =
+                        sanitize_csv_cell(e.process.parent_name.as_deref().unwrap_or(""));
+                    let cmdline = sanitize_csv_cell(e.process.cmdline.as_deref().unwrap_or(""));
                     wtr.write_record([
                         &e.protocol.to_string(),
                         &e.local_addr.to_string(),
                         &e.remote_addr.map(|a| a.to_string()).unwrap_or_default(),
                         &e.state.to_string(),
                         &e.process.pid.to_string(),
-                        &e.process.name,
-                        e.process.user.as_deref().unwrap_or(""),
+                        &process_name,
+                        &user,
                         &e.process
                             .parent_pid
                             .map(|p| p.to_string())
                             .unwrap_or_default(),
-                        e.process.parent_name.as_deref().unwrap_or(""),
-                        e.process.cmdline.as_deref().unwrap_or(""),
+                        &parent_name,
+                        &cmdline,
                     ])?;
                 }
                 wtr.flush()?;
             }
             Ok(String::from_utf8(buf)?)
         }
+    }
+}
+
+fn sanitize_csv_cell(value: &str) -> String {
+    let formula_start = value
+        .trim_start_matches(|c: char| c.is_ascii_control())
+        .chars()
+        .next();
+    match formula_start {
+        Some('=' | '+' | '-' | '@') => format!("'{value}"),
+        _ => value.to_owned(),
     }
 }
 
@@ -825,6 +841,34 @@ mod tests {
         let csv_out = export(&entries, ExportFormat::Csv).unwrap();
         let lines: Vec<&str> = csv_out.lines().collect();
         assert_eq!(lines.len(), 4); // header + 3 rows
+    }
+
+    #[test]
+    fn export_csv_sanitizes_formula_cells() {
+        let mut entry = make_entry(80, 1, "=calc");
+        entry.process.user = Some("+user".to_string());
+        entry.process.parent_name = Some("-parent".to_string());
+        entry.process.cmdline = Some("@cmd".to_string());
+
+        let csv_out = export(&[entry], ExportFormat::Csv).unwrap();
+        assert!(csv_out.contains("'=calc"));
+        assert!(csv_out.contains("'+user"));
+        assert!(csv_out.contains("'-parent"));
+        assert!(csv_out.contains("'@cmd"));
+    }
+
+    #[test]
+    fn export_csv_sanitizes_control_prefixed_formula_cells() {
+        let mut entry = make_entry(80, 1, "\t=calc");
+        entry.process.user = Some("\r+user".to_string());
+        entry.process.parent_name = Some("\n-parent".to_string());
+        entry.process.cmdline = Some("\u{0008}@cmd".to_string());
+
+        let csv_out = export(&[entry], ExportFormat::Csv).unwrap();
+        assert!(csv_out.contains("'\t=calc"));
+        assert!(csv_out.contains("'\r+user"));
+        assert!(csv_out.contains("'\n-parent"));
+        assert!(csv_out.contains("'\u{0008}@cmd"));
     }
 
     #[test]
