@@ -773,7 +773,8 @@ fn draw_process_detail_fullscreen(f: &mut Frame, app: &App, area: Rect) {
                 )));
                 let max_files = (columns[0].height as usize).saturating_sub(left_lines.len() + 1);
                 for file in detail.open_files.iter().take(max_files) {
-                    left_lines.push(Line::from(format!("    {file}")));
+                    let safe_file = process_detail::sanitize_for_terminal(file);
+                    left_lines.push(Line::from(format!("    {safe_file}")));
                 }
                 if detail.open_files.len() > max_files {
                     left_lines.push(Line::from(Span::styled(
@@ -792,12 +793,14 @@ fn draw_process_detail_fullscreen(f: &mut Frame, app: &App, area: Rect) {
                 )));
                 let remaining = (columns[0].height as usize).saturating_sub(left_lines.len());
                 for (k, v) in detail.env_vars.iter().take(remaining) {
-                    let val_display = if v.len() > 60 {
-                        format!("{}...", &v[..57])
+                    let safe_key = process_detail::sanitize_for_terminal(k);
+                    let safe_val = process_detail::sanitize_for_terminal(v);
+                    let val_display = if safe_val.len() > 60 {
+                        format!("{}...", &safe_val[..57])
                     } else {
-                        v.clone()
+                        safe_val
                     };
-                    left_lines.push(Line::from(format!("    {k}={val_display}")));
+                    left_lines.push(Line::from(format!("    {safe_key}={val_display}")));
                 }
             }
         }

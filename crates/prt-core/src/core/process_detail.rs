@@ -230,6 +230,22 @@ pub fn format_rss(kb: u64) -> String {
     }
 }
 
+/// Sanitize untrusted text before rendering in terminal UIs.
+///
+/// Replaces ASCII control characters (including ESC) with '?' to prevent
+/// terminal escape/control-sequence injection.
+pub fn sanitize_for_terminal(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_control() && c != '\n' && c != '\t' {
+                '?'
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,5 +321,17 @@ mod tests {
     #[test]
     fn format_rss_gigabytes() {
         assert_eq!(format_rss(2_097_152), "2.0 GB");
+    }
+
+    #[test]
+    fn sanitize_for_terminal_replaces_escape_and_controls() {
+        let input = "ok\x1b[31mred\x07done";
+        assert_eq!(sanitize_for_terminal(input), "ok?[31mred?done");
+    }
+
+    #[test]
+    fn sanitize_for_terminal_keeps_printable_text() {
+        let input = "PATH=/usr/bin\twith-tab\nline2";
+        assert_eq!(sanitize_for_terminal(input), input);
     }
 }
