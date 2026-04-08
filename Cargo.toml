@@ -9,6 +9,7 @@ license = "MIT"
 repository = "https://github.com/rekurt/prt"
 rust-version = "1.75"
 homepage = "https://github.com/rekurt/prt"
+documentation = "https://docs.rs/prt-core"
 keywords = ["network", "port", "monitor", "tui", "terminal"]
 categories = ["command-line-utilities", "network-programming"]
 

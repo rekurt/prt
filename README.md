@@ -28,6 +28,42 @@
 
 `prt` shows which processes occupy network ports on your machine — in real time, right in your terminal. Think of it as a live, interactive `lsof -i` / `ss -tlnp` with colors, filtering, and process trees.
 
+## Why prt?
+
+Traditional tools like `lsof`, `ss`, and `netstat` give you a static snapshot that's already stale by the time you read it. `prt` gives you a **live, auto-refreshing terminal UI** with change tracking, so you can:
+
+- **See connections appear and disappear** in real time (green = new, red = closing)
+- **Find port conflicts instantly** — no more `lsof -i :8080` guessing games
+- **Detect suspicious activity** — anomalous connections are auto-flagged with `[!]`
+- **Block malicious IPs** directly from the TUI with one keypress
+- **Debug containerized apps** — see which Docker/Podman container owns each port
+- **Trace syscalls** on the fly — attach strace/dtruss without leaving the TUI
+- **Monitor bandwidth** — system-wide throughput displayed in the header bar
+- **Set up alerts** — get notified when specific ports open or processes exceed connection limits
+
+## prt vs lsof vs ss vs netstat
+
+| Feature | `prt` | `lsof -i` | `ss -tlnp` | `netstat -tlnp` |
+|---------|:-----:|:---------:|:----------:|:---------------:|
+| Live auto-refresh | **Yes** | No | No | No |
+| Change tracking (new/gone) | **Yes** | No | No | No |
+| Color-coded output | **Yes** | No | No | No |
+| Interactive filtering | **Yes** | No | No | No |
+| Process tree | **Yes** | No | No | No |
+| Known port names (170+) | **Yes** | Partial | Partial | Partial |
+| Suspicious connection detection | **Yes** | No | No | No |
+| Container awareness (Docker) | **Yes** | No | No | No |
+| Bandwidth monitoring | **Yes** | No | No | No |
+| Firewall quick-block | **Yes** | No | No | No |
+| Strace/dtruss attach | **Yes** | No | No | No |
+| SSH tunnel creation | **Yes** | No | No | No |
+| Alert rules (TOML config) | **Yes** | No | No | No |
+| Export to JSON/CSV | **Yes** | No | No | No |
+| NDJSON streaming for scripts | **Yes** | No | No | No |
+| Multilingual (EN/RU/ZH) | **Yes** | No | No | No |
+| macOS + Linux | **Yes** | macOS/Linux | Linux | Linux |
+| No dependencies (single binary) | **Yes** | System | System | System |
+
 ## Features
 
 ### Live Table with Change Tracking
@@ -350,6 +386,53 @@ cargo bench -p prt-core          # criterion benchmarks
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+## FAQ
+
+### How do I see all processes? Some ports show as "unknown".
+
+Run with `sudo prt` to see processes owned by other users. Without root, the OS hides PIDs you don't own.
+
+### Does prt work on Windows?
+
+Not yet. `prt` currently supports **macOS** (10.15+) and **Linux** (with `/proc`). Windows support is tracked in the issue tracker.
+
+### How is prt different from `htop` or `btop`?
+
+`htop`/`btop` are general-purpose process monitors. `prt` focuses specifically on **network connections and ports** — showing which process uses which port, tracking connection lifecycle, detecting anomalies, and providing network-specific actions (firewall block, strace, SSH tunnels).
+
+### Can I use prt in scripts and pipelines?
+
+Yes! Use `prt --json` for NDJSON streaming output, `prt --export json|csv` for snapshots, or `prt watch <ports>` for simple UP/DOWN monitoring. All non-TUI modes work cleanly when piped.
+
+### How do I add custom port names?
+
+Edit `~/.config/prt/config.toml`:
+
+```toml
+[known_ports]
+3000 = "my-frontend"
+8080 = "my-api"
+9090 = "prometheus"
+```
+
+### Is prt safe to use in production?
+
+`prt` is a **read-only diagnostic tool** by default. Destructive actions (kill process, block IP, attach strace) always require explicit confirmation. The TUI never modifies system state without your approval.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=rekurt/prt&type=Date)](https://star-history.com/#rekurt/prt&Date)
+
 ## License
 
 [MIT](LICENSE)
+
+---
+
+<div align="center">
+
+**If `prt` is useful to you, consider giving it a star on GitHub!**
+
+[![GitHub stars](https://img.shields.io/github/stars/rekurt/prt?style=social)](https://github.com/rekurt/prt)
+
+</div>
