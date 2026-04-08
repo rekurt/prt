@@ -7,9 +7,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/prt-core"
 keywords = ["network", "port", "monitor", "tui", "terminal"]
 categories = ["command-line-utilities", "network-programming"]
-readme = "README.md"
+readme = "../../README.md"
 
 [[bin]]
 name = "prt"

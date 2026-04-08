@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question / Discussion
+    url: https://github.com/rekurt/prt/discussions
+    about: Ask questions or discuss ideas in GitHub Discussions

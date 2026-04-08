@@ -28,6 +28,42 @@
 
 `prt` 实时显示哪些进程占用了您机器上的网络端口。它是 `lsof -i` / `ss -tlnp` 的交互式替代品，支持颜色高亮、过滤和进程树。
 
+## 为什么选择 prt？
+
+传统工具 `lsof`、`ss` 和 `netstat` 只能给出静态快照，读到时已经过时。`prt` 提供**实时自动刷新的终端界面**，带变化追踪：
+
+- **实时查看连接变化** — 绿色 = 新连接，红色 = 正在关闭
+- **即时发现端口冲突** — 不再需要反复猜测 `lsof -i :8080`
+- **自动检测可疑连接** — 异常连接自动标记 `[!]`
+- **一键封锁恶意 IP** — 直接在 TUI 中通过防火墙封锁
+- **容器集成** — 查看 Docker/Podman 容器占用的端口
+- **即时系统调用追踪** — 无需离开 TUI 即可使用 strace/dtruss
+- **带宽监控** — 标题栏实时显示系统级吞吐量
+- **告警规则** — 端口开启或连接数超限时收到通知
+
+## prt vs lsof vs ss vs netstat
+
+| 功能 | `prt` | `lsof -i` | `ss -tlnp` | `netstat -tlnp` |
+|------|:-----:|:---------:|:----------:|:---------------:|
+| 实时自动刷新 | **是** | 否 | 否 | 否 |
+| 变化追踪（新建/关闭） | **是** | 否 | 否 | 否 |
+| 彩色输出 | **是** | 否 | 否 | 否 |
+| 交互式过滤 | **是** | 否 | 否 | 否 |
+| 进程树 | **是** | 否 | 否 | 否 |
+| 已知端口名称（170+） | **是** | 部分 | 部分 | 部分 |
+| 可疑连接检测 | **是** | 否 | 否 | 否 |
+| Docker/Podman 容器 | **是** | 否 | 否 | 否 |
+| 带宽监控 | **是** | 否 | 否 | 否 |
+| IP 封锁（防火墙） | **是** | 否 | 否 | 否 |
+| Strace/dtruss | **是** | 否 | 否 | 否 |
+| SSH 隧道 | **是** | 否 | 否 | 否 |
+| 告警规则（TOML 配置） | **是** | 否 | 否 | 否 |
+| 导出 JSON/CSV | **是** | 否 | 否 | 否 |
+| NDJSON 流式输出 | **是** | 否 | 否 | 否 |
+| 多语言（EN/RU/ZH） | **是** | 否 | 否 | 否 |
+| macOS + Linux | **是** | macOS/Linux | Linux | Linux |
+| 单文件二进制 | **是** | 系统自带 | 系统自带 | 系统自带 |
+
 ## 功能特性
 
 ### 实时表格与变化追踪
@@ -297,6 +333,42 @@ cargo bench -p prt-core          # 基准测试
 
 详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
+## 常见问题
+
+### 如何查看所有进程？某些端口显示 "unknown"。
+
+使用 `sudo prt` 运行 — 没有 root 权限时，操作系统会隐藏其他用户的进程 PID。
+
+### prt 支持 Windows 吗？
+
+目前不支持。`prt` 当前支持 **macOS**（10.15+）和 **Linux**（需要 `/proc`）。Windows 支持正在 issue tracker 中跟踪。
+
+### prt 和 `htop` / `btop` 有什么区别？
+
+`htop`/`btop` 是通用进程监控器。`prt` 专注于**网络连接和端口** — 显示哪个进程使用哪个端口、追踪连接生命周期、检测异常，并提供网络特定操作（防火墙封锁、strace、SSH 隧道）。
+
+### prt 可以用在脚本和管道中吗？
+
+可以！使用 `prt --json` 进行 NDJSON 流式输出，`prt --export json|csv` 获取快照，或 `prt watch <端口>` 进行简单的 UP/DOWN 监控。
+
+### prt 在生产环境中安全吗？
+
+`prt` 默认是**只读诊断工具**。破坏性操作（终止进程、封锁 IP、附加 strace）始终需要明确确认。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=rekurt/prt&type=Date)](https://star-history.com/#rekurt/prt&Date)
+
 ## 许可证
 
 [MIT](LICENSE)
+
+---
+
+<div align="center">
+
+**如果 `prt` 对您有帮助，请在 GitHub 上点个 Star！**
+
+[![GitHub stars](https://img.shields.io/github/stars/rekurt/prt?style=social)](https://github.com/rekurt/prt)
+
+</div>
