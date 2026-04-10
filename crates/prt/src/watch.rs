@@ -8,6 +8,7 @@ use prt_core::core::scanner;
 use prt_core::model::TICK_RATE;
 use std::collections::HashMap;
 use std::io::{self, IsTerminal, Write};
+use std::time::Instant;
 
 /// Current state of a watched port.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,6 +24,7 @@ pub fn run_watch(ports: Vec<u16>) -> Result<()> {
     let is_tty = io::stdout().is_terminal();
     let mut stdout = io::stdout().lock();
     let mut prev_states: HashMap<u16, bool> = HashMap::new();
+    let mut since: HashMap<u16, Instant> = HashMap::new();
 
     loop {
         let entries = scanner::scan()?;
@@ -58,8 +60,11 @@ pub fn run_watch(ports: Vec<u16>) -> Result<()> {
             let prev_up = prev_states.get(&port).copied();
             if prev_up.is_some() && prev_up != Some(state.up) {
                 any_changed = true;
+                since.insert(port, Instant::now());
             }
+            since.entry(port).or_insert_with(Instant::now);
             prev_states.insert(port, state.up);
+            let since_text = format_since(*since.get(&port).unwrap_or(&Instant::now()));
 
             // Format output
             if is_tty {
@@ -68,19 +73,22 @@ pub fn run_watch(ports: Vec<u16>) -> Result<()> {
                     let pid = state.pid.unwrap_or(0);
                     writeln!(
                         stdout,
-                        "\x1b[32m:{port:<5} \u{25cf} UP   \x1b[0m {name} ({pid})"
+                        "\x1b[32m:{port:<5} \u{25cf} UP   \x1b[0m {name} ({pid})  since {since_text}"
                     )?;
                 } else {
-                    writeln!(stdout, "\x1b[31m:{port:<5} \u{25cb} DOWN\x1b[0m")?;
+                    writeln!(
+                        stdout,
+                        "\x1b[31m:{port:<5} \u{25cb} DOWN\x1b[0m              since {since_text}"
+                    )?;
                 }
             } else {
                 // Plain text for piped output
                 if state.up {
                     let name = state.process_name.as_deref().unwrap_or("?");
                     let pid = state.pid.unwrap_or(0);
-                    writeln!(stdout, ":{port} UP {name} ({pid})")?;
+                    writeln!(stdout, ":{port} UP {name} ({pid}) since {since_text}")?;
                 } else {
-                    writeln!(stdout, ":{port} DOWN")?;
+                    writeln!(stdout, ":{port} DOWN since {since_text}")?;
                 }
             }
         }
@@ -92,6 +100,17 @@ pub fn run_watch(ports: Vec<u16>) -> Result<()> {
 
         stdout.flush()?;
         std::thread::sleep(TICK_RATE);
+    }
+}
+
+fn format_since(when: Instant) -> String {
+    let secs = when.elapsed().as_secs();
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else {
+        format!("{}h", secs / 3600)
     }
 }
 
@@ -161,5 +180,12 @@ mod tests {
             }
         }
         assert!(!changed, "first run should not trigger bell");
+    }
+
+    #[test]
+    fn format_since_seconds() {
+        let now = Instant::now();
+        let formatted = format_since(now);
+        assert!(formatted.ends_with('s'));
     }
 }

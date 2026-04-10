@@ -16,8 +16,9 @@ use std::time::Instant;
 /// Encapsulates the full refresh cycle:
 /// `scan → diff → enrich → retain(gone) → sort`
 ///
-/// Stores sudo password (if elevated) so subsequent refreshes
-/// can re-authenticate without user interaction.
+/// Tracks whether sudo authentication was completed successfully.
+/// Subsequent refreshes use cached sudo credentials (`sudo -n`)
+/// without storing the password in memory.
 pub struct Session {
     pub entries: Vec<TrackedEntry>,
     pub sort: SortState,
@@ -25,7 +26,6 @@ pub struct Session {
     pub is_root: bool,
     pub config: PrtConfig,
     pub bandwidth: BandwidthTracker,
-    sudo_password: Option<String>,
 }
 
 impl Default for Session {
@@ -43,14 +43,13 @@ impl Session {
             is_root: scanner::is_root(),
             config: crate::config::load_config(),
             bandwidth: BandwidthTracker::new(),
-            sudo_password: None,
         }
     }
 
     /// Run a scan cycle: scan → diff → enrich → retain → sort.
     pub fn refresh(&mut self) -> Result<(), String> {
-        let scan_result = if let Some(password) = &self.sudo_password {
-            scanner::scan_with_sudo(password)
+        let scan_result = if self.is_elevated {
+            scanner::scan_elevated()
         } else {
             scanner::scan()
         };
@@ -122,11 +121,6 @@ impl Session {
         }
     }
 
-    /// Get cached sudo password (if elevated). Used by firewall block.
-    pub fn sudo_password(&self) -> Option<&str> {
-        self.sudo_password.as_deref()
-    }
-
     pub fn filtered_indices(&self, query: &str) -> Vec<usize> {
         scanner::filter_indices(&self.entries, query)
     }
@@ -136,7 +130,6 @@ impl Session {
         let s = i18n::strings();
         match scanner::scan_with_sudo(password) {
             Ok(new_entries) => {
-                self.sudo_password = Some(password.to_string());
                 self.is_elevated = true;
                 self.is_root = true;
                 let now = Instant::now();
@@ -159,7 +152,6 @@ impl Session {
                 s.sudo_elevated.to_string()
             }
             Err(e) => {
-                self.sudo_password = None;
                 self.is_elevated = false;
                 let msg = e.to_string();
                 if msg.contains("incorrect password") || msg.contains("Sorry") {

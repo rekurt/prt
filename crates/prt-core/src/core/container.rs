@@ -37,6 +37,7 @@ pub fn has_containers(names: &HashMap<u32, String>) -> bool {
 
 /// Resolve via `docker ps` + `docker inspect`.
 fn docker_resolve(pids: &[u32]) -> Option<HashMap<u32, String>> {
+    let pid_set: std::collections::HashSet<u32> = pids.iter().copied().collect();
     // Get all running containers: ID and Name
     let output = run_with_timeout(
         "docker",
@@ -69,7 +70,7 @@ fn docker_resolve(pids: &[u32]) -> Option<HashMap<u32, String>> {
     let mut result = HashMap::new();
     for (id, name) in &containers {
         if let Some(container_pid) = get_container_pid("docker", id) {
-            if pids.contains(&container_pid) {
+            if pid_set.contains(&container_pid) {
                 result.insert(container_pid, name.clone());
             }
         }
@@ -80,6 +81,7 @@ fn docker_resolve(pids: &[u32]) -> Option<HashMap<u32, String>> {
 
 /// Resolve via `podman ps` + `podman inspect`.
 fn podman_resolve(pids: &[u32]) -> Option<HashMap<u32, String>> {
+    let pid_set: std::collections::HashSet<u32> = pids.iter().copied().collect();
     let output = run_with_timeout(
         "podman",
         &["ps", "--no-trunc", "--format", "{{.ID}} {{.Names}}"],
@@ -110,7 +112,7 @@ fn podman_resolve(pids: &[u32]) -> Option<HashMap<u32, String>> {
     let mut result = HashMap::new();
     for (id, name) in &containers {
         if let Some(container_pid) = get_container_pid("podman", id) {
-            if pids.contains(&container_pid) {
+            if pid_set.contains(&container_pid) {
                 result.insert(container_pid, name.clone());
             }
         }
@@ -154,7 +156,7 @@ fn run_with_timeout(cmd: &str, args: &[&str]) -> Option<String> {
                     use std::io::Read;
                     let _ = stdout.read_to_string(&mut out);
                 }
-                return if out.is_empty() { None } else { Some(out) };
+                return Some(out);
             }
             Ok(None) => {
                 if start.elapsed() > timeout {

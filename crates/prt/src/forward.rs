@@ -4,6 +4,8 @@
 //! Tunnels are killed on Drop to prevent orphaned SSH processes.
 
 use std::process::{Child, Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 /// A single SSH tunnel.
 pub struct SshTunnel {
@@ -17,13 +19,30 @@ impl SshTunnel {
     /// `remote` format: `host:port` or `user@host:port`
     pub fn new(local_port: u16, remote_host: &str, remote_port: u16) -> Result<Self, String> {
         let forward_spec = format!("{local_port}:localhost:{remote_port}");
-        let child = Command::new("ssh")
+        let mut child = Command::new("ssh")
             .args(["-N", "-L", &forward_spec, remote_host])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("failed to start ssh: {e}"))?;
+
+        // Quick validation: if ssh exits immediately, surface stderr as an error.
+        thread::sleep(Duration::from_millis(150));
+        if let Ok(Some(status)) = child.try_wait() {
+            use std::io::Read;
+            let mut stderr = String::new();
+            if let Some(mut err) = child.stderr.take() {
+                let _ = err.read_to_string(&mut stderr);
+            }
+            let stderr = stderr.trim();
+            let details = if stderr.is_empty() {
+                format!("ssh exited with status {status}")
+            } else {
+                stderr.to_string()
+            };
+            return Err(format!("failed to establish ssh tunnel: {details}"));
+        }
 
         Ok(Self {
             local_port,

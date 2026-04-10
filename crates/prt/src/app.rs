@@ -196,8 +196,7 @@ impl App {
     /// Execute the confirmed firewall block.
     pub fn execute_block(&mut self) {
         if let Some((ip, _)) = self.confirm_block.take() {
-            let sudo_pw = self.session.sudo_password();
-            match firewall::execute_block(ip, sudo_pw) {
+            match firewall::execute_block(ip, None) {
                 Ok(()) => {
                     let undo = firewall::unblock_command(ip);
                     self.set_status(format!("blocked {ip} — undo: {undo}"));
