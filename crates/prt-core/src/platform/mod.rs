@@ -51,7 +51,7 @@ pub fn has_elevated_access() -> bool {
     }
     #[cfg(target_os = "linux")]
     {
-        true
+        linux::has_elevated_access()
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
@@ -67,8 +67,7 @@ pub fn scan_ports_with_sudo(password: &str) -> Result<Vec<PortEntry>> {
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = password;
-        linux::scan()
+        linux::scan_with_sudo(password)
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
