@@ -48,6 +48,8 @@ impl Session {
 
     /// Run a scan cycle: scan → diff → enrich → retain → sort.
     pub fn refresh(&mut self) -> Result<(), String> {
+        self.sync_elevation_state(scanner::has_elevated_access());
+
         let scan_result = if self.is_elevated {
             scanner::scan_elevated()
         } else {
@@ -56,6 +58,7 @@ impl Session {
 
         match scan_result {
             Ok(new_entries) => {
+                self.sync_elevation_state(scanner::has_elevated_access());
                 let now = Instant::now();
                 self.entries = scanner::diff_entries(&self.entries, new_entries, now);
 
@@ -125,6 +128,13 @@ impl Session {
         scanner::filter_indices(&self.entries, query)
     }
 
+    fn sync_elevation_state(&mut self, has_elevated_access: bool) {
+        if self.is_elevated && !has_elevated_access {
+            self.is_elevated = false;
+            self.is_root = scanner::is_root();
+        }
+    }
+
     /// Attempt sudo elevation with password. Returns status message.
     pub fn try_sudo(&mut self, password: &str) -> String {
         let s = i18n::strings();
@@ -161,5 +171,22 @@ impl Session {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sync_elevation_state_clears_expired_sudo_cache() {
+        let mut session = Session::new();
+        session.is_elevated = true;
+        session.is_root = true;
+
+        session.sync_elevation_state(false);
+
+        assert!(!session.is_elevated);
+        assert_eq!(session.is_root, scanner::is_root());
     }
 }
