@@ -23,7 +23,7 @@ pub const TICK_RATE: Duration = Duration::from_secs(2);
 pub const GONE_RETENTION: Duration = Duration::from_secs(5);
 
 /// Network transport protocol.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum Protocol {
     Tcp,
     Udp,
@@ -42,7 +42,7 @@ impl fmt::Display for Protocol {
 ///
 /// Matches standard TCP FSM states plus `Unknown` for UDP or unparsable states.
 /// Display format uses uppercase with underscores (e.g. `TIME_WAIT`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum ConnectionState {
     Listen,
     Established,

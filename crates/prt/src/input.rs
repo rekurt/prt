@@ -121,8 +121,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('s') => {
             if !app.session.is_root {
-                app.sudo_prompt = true;
-                app.sudo_password.clear();
+                app.open_sudo_prompt(crate::app::SudoPurpose::Refresh);
             }
         }
 

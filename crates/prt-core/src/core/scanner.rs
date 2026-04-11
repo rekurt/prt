@@ -6,13 +6,15 @@
 //! scan() → diff_entries() → sort_entries() → filter_indices() → UI
 //! ```
 //!
-//! Identity key for change tracking is `(local_port, pid)`.
+//! Identity key for change tracking is:
+//! `(pid, protocol, local_addr, remote_addr, state)`.
 
 use crate::i18n;
 use crate::model::{EntryStatus, ExportFormat, PortEntry, SortColumn, SortState, TrackedEntry};
 use crate::platform;
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 /// Scan all network ports visible to the current user.
@@ -24,6 +26,11 @@ pub fn scan() -> Result<Vec<PortEntry>> {
 /// Falls back to unprivileged scan if credentials are not cached.
 pub fn scan_elevated() -> Result<Vec<PortEntry>> {
     platform::scan_ports_elevated()
+}
+
+/// Returns `true` when cached elevated access is still available.
+pub fn has_elevated_access() -> bool {
+    platform::has_elevated_access()
 }
 
 /// Scan ports using an explicit sudo password (`sudo -S`).
@@ -40,28 +47,25 @@ pub fn scan_with_sudo(password: &str) -> Result<Vec<PortEntry>> {
 /// - Entries in `prev` but not `current` are [`EntryStatus::Gone`]
 ///
 /// Already-gone entries from `prev` are dropped (no double-gone).
-/// Identity key: `(local_port, pid)`.
+/// Identity key: `(pid, protocol, local_addr, remote_addr, state)`.
 pub fn diff_entries(
     prev: &[TrackedEntry],
     current: Vec<PortEntry>,
     now: Instant,
 ) -> Vec<TrackedEntry> {
-    let current_keys: HashSet<(u16, u32)> = current
-        .iter()
-        .map(|e| (e.local_port(), e.process.pid))
-        .collect();
+    let current_keys: HashSet<EntryKey> = current.iter().map(entry_key).collect();
 
     // HashMap for O(1) lookup + carry-forward of first_seen from prev entries.
-    let prev_map: HashMap<(u16, u32), &TrackedEntry> = prev
+    let prev_map: HashMap<EntryKey, &TrackedEntry> = prev
         .iter()
         .filter(|e| e.status != EntryStatus::Gone)
-        .map(|e| ((e.entry.local_port(), e.entry.process.pid), e))
+        .map(|e| (tracked_entry_key(e), e))
         .collect();
 
     let mut result: Vec<TrackedEntry> = current
         .into_iter()
         .map(|entry| {
-            let key = (entry.local_port(), entry.process.pid);
+            let key = entry_key(&entry);
             let (status, first_seen) = if let Some(prev_e) = prev_map.get(&key) {
                 // Carry forward first_seen; if prev had None (pre-upgrade),
                 // start counting from now so aging kicks in eventually.
@@ -83,7 +87,7 @@ pub fn diff_entries(
         .collect();
 
     for prev_entry in prev {
-        let key = (prev_entry.entry.local_port(), prev_entry.entry.process.pid);
+        let key = tracked_entry_key(prev_entry);
         if !current_keys.contains(&key) && prev_entry.status != EntryStatus::Gone {
             result.push(TrackedEntry {
                 entry: prev_entry.entry.clone(),
@@ -100,6 +104,28 @@ pub fn diff_entries(
     }
 
     result
+}
+
+type EntryKey = (
+    u32,
+    crate::model::Protocol,
+    SocketAddr,
+    Option<SocketAddr>,
+    crate::model::ConnectionState,
+);
+
+fn entry_key(entry: &PortEntry) -> EntryKey {
+    (
+        entry.process.pid,
+        entry.protocol,
+        entry.local_addr,
+        entry.remote_addr,
+        entry.state,
+    )
+}
+
+fn tracked_entry_key(entry: &TrackedEntry) -> EntryKey {
+    entry_key(&entry.entry)
 }
 
 /// Format a duration as a human-readable short string.
@@ -399,6 +425,21 @@ mod tests {
         }
     }
 
+    fn make_entry_with_remote(
+        port: u16,
+        pid: u32,
+        name: &str,
+        remote_port: u16,
+        state: ConnectionState,
+    ) -> PortEntry {
+        let mut entry = make_entry_full(port, pid, name, Protocol::Tcp, state, None);
+        entry.remote_addr = Some(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+            remote_port,
+        ));
+        entry
+    }
+
     fn make_tracked(port: u16, pid: u32, name: &str, status: EntryStatus) -> TrackedEntry {
         TrackedEntry {
             entry: make_entry(port, pid, name),
@@ -500,6 +541,30 @@ mod tests {
         assert!(result
             .iter()
             .any(|e| e.entry.local_port() == 80 && e.status == EntryStatus::Gone));
+    }
+
+    #[test]
+    fn diff_same_pid_port_but_different_remote_is_new() {
+        let prev = vec![TrackedEntry {
+            entry: make_entry_with_remote(443, 42, "nginx", 51000, ConnectionState::Established),
+            status: EntryStatus::Unchanged,
+            seen_at: Instant::now(),
+            first_seen: None,
+            suspicious: Vec::new(),
+            container_name: None,
+            service_name: None,
+        }];
+        let current = vec![make_entry_with_remote(
+            443,
+            42,
+            "nginx",
+            51001,
+            ConnectionState::Established,
+        )];
+        let result = diff_entries(&prev, current, Instant::now());
+        assert_eq!(result.len(), 2);
+        assert!(result.iter().any(|e| e.status == EntryStatus::New));
+        assert!(result.iter().any(|e| e.status == EntryStatus::Gone));
     }
 
     // ── sort_entries: table-driven per column ─────────────────────

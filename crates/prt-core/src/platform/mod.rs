@@ -43,6 +43,22 @@ pub fn scan_ports_elevated() -> Result<Vec<PortEntry>> {
     }
 }
 
+/// Returns `true` when elevated access can still be used without prompting.
+pub fn has_elevated_access() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::has_elevated_access()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux::has_elevated_access()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        false
+    }
+}
+
 /// Scan with explicit sudo password piped via stdin (`sudo -S`).
 pub fn scan_ports_with_sudo(password: &str) -> Result<Vec<PortEntry>> {
     #[cfg(target_os = "macos")]
@@ -51,8 +67,7 @@ pub fn scan_ports_with_sudo(password: &str) -> Result<Vec<PortEntry>> {
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = password;
-        linux::scan()
+        linux::scan_with_sudo(password)
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {

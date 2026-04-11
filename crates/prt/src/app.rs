@@ -21,6 +21,12 @@ use std::time::Instant;
 use crate::input::handle_key;
 use crate::ui::draw;
 
+#[derive(Clone, Copy)]
+pub(crate) enum SudoPurpose {
+    Refresh,
+    Block(std::net::IpAddr),
+}
+
 pub struct App {
     pub session: Session,
     pub filtered_indices: Vec<usize>,
@@ -35,6 +41,7 @@ pub struct App {
     pub confirm_kill: Option<(u32, String)>,
     pub sudo_prompt: bool,
     pub sudo_password: String,
+    sudo_purpose: SudoPurpose,
     pub status_msg: Option<(String, Instant)>,
     pub should_quit: bool,
     /// Alert results from the last refresh cycle.
@@ -72,6 +79,7 @@ impl App {
             confirm_kill: None,
             sudo_prompt: false,
             sudo_password: String::new(),
+            sudo_purpose: SudoPurpose::Refresh,
             status_msg: None,
             should_quit: false,
             active_alerts: Vec::new(),
@@ -195,9 +203,14 @@ impl App {
 
     /// Execute the confirmed firewall block.
     pub fn execute_block(&mut self) {
-        if let Some((ip, _)) = self.confirm_block.take() {
-            let sudo_pw = self.session.sudo_password();
-            match firewall::execute_block(ip, sudo_pw) {
+        if let Some((ip, cmd)) = self.confirm_block.take() {
+            if !self.session.is_root && !self.session.is_elevated {
+                self.confirm_block = Some((ip, cmd));
+                self.open_sudo_prompt(SudoPurpose::Block(ip));
+                return;
+            }
+
+            match firewall::execute_block(ip, None) {
                 Ok(()) => {
                     let undo = firewall::unblock_command(ip);
                     self.set_status(format!("blocked {ip} — undo: {undo}"));
@@ -292,12 +305,32 @@ impl App {
         self.namespace_cache = namespace::group_by_namespace(&ns_map);
     }
 
+    pub fn open_sudo_prompt(&mut self, purpose: SudoPurpose) {
+        self.sudo_purpose = purpose;
+        self.sudo_prompt = true;
+        self.sudo_password.clear();
+    }
+
     pub fn try_sudo(&mut self) {
         let password = std::mem::take(&mut self.sudo_password);
         self.sudo_prompt = false;
-        let msg = self.session.try_sudo(&password);
-        self.set_status(msg);
-        self.update_filtered();
+        match self.sudo_purpose {
+            SudoPurpose::Refresh => {
+                let msg = self.session.try_sudo(&password);
+                self.set_status(msg);
+                self.update_filtered();
+            }
+            SudoPurpose::Block(ip) => match firewall::execute_block(ip, Some(&password)) {
+                Ok(()) => {
+                    self.session.is_elevated = true;
+                    self.session.is_root = true;
+                    self.confirm_block = None;
+                    let undo = firewall::unblock_command(ip);
+                    self.set_status(format!("blocked {ip} — undo: {undo}"));
+                }
+                Err(e) => self.set_status(format!("block failed: {e}")),
+            },
+        }
     }
 }
 

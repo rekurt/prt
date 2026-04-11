@@ -196,9 +196,9 @@ prt watch 3000 8080 5432
 Compact non-TUI display showing UP/DOWN status for specific ports. Emits BEL (`\x07`) on state changes. Supports ANSI colors when connected to a TTY, plain text when piped.
 
 ```
-:3000 ● UP   nginx (1234)   since 14:32:05
-:8080 ○ DOWN                 since 14:35:12
-:5432 ● UP   postgres (567)  since 14:32:05
+:3000 ● UP   nginx (1234)  since 42s
+:8080 ○ DOWN               since 7m
+:5432 ● UP   postgres (567) since 42s
 ```
 
 ### Export
@@ -374,11 +374,47 @@ App::refresh()
 | **macOS** | `lsof -F` structured output | 2 `ps` calls per scan cycle (batch) |
 | **Linux** | `/proc/net/` via `procfs` | Zero subprocess overhead |
 
+## High-ROI Use Cases (beyond basic monitoring)
+
+### 1) Pre-deploy network regression guard
+
+Run `prt --json` before and after a deploy and diff the connection profile.  
+This catches accidental new egress paths, wrong bind addresses, and hidden side effects.
+
+```bash
+prt --json | jq -c '{pid: .process.pid, name: .process.name, local: .local_addr, remote: .remote_addr, state: .state}'
+```
+
+### 2) Live incident response loop in terminal
+
+Use suspicious filter + block + trace without leaving the TUI:
+
+1. `/` then `!` to show suspicious only
+2. `b` to block remote IP
+3. `t` to attach strace/dtruss and inspect behavior
+
+This provides a fast “observe → contain → inspect” workflow.
+
+### 3) Container port exposure audit
+
+In container-heavy hosts, use **Topology** (`5`) and **Namespaces** (`7`) to spot
+unexpected exposure (e.g., debug ports, admin APIs, accidental public binds).
+
+### 4) Runtime feature-flag verification
+
+During feature rollout, track whether enabling a flag introduces new outbound
+connections or state churn (`SYN_SENT`, `CLOSE_WAIT` spikes, etc.).
+
+### 5) Lightweight host canary for script-heavy services
+
+For Python/Node/Ruby-heavy stacks, suspicious heuristics + alerts can act as a
+cheap canary for anomalous listener behavior on sensitive ports.
+
 ## Development
 
 ```bash
 cargo build --workspace          # build everything
-cargo test --workspace           # run all tests (188 tests)
+cargo test --workspace           # run all tests
 cargo clippy --workspace         # lint
 cargo fmt --all -- --check       # format check
 cargo bench -p prt-core          # criterion benchmarks

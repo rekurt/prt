@@ -1,9 +1,11 @@
 use crate::model::{ConnectionState, PortEntry, ProcessInfo, Protocol};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use procfs::net::{TcpNetEntry, TcpState, UdpNetEntry};
 use procfs::process::Process;
 use std::collections::HashMap;
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::process::{Command, Stdio};
 
 pub fn scan() -> Result<Vec<PortEntry>> {
     let mut entries = Vec::new();
@@ -39,6 +41,39 @@ pub fn scan() -> Result<Vec<PortEntry>> {
     }
 
     Ok(entries)
+}
+
+pub fn has_elevated_access() -> bool {
+    Command::new("sudo")
+        .args(["-n", "true"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+pub fn scan_with_sudo(password: &str) -> Result<Vec<PortEntry>> {
+    let mut child = Command::new("sudo")
+        .args(["-S", "-v"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("failed to run sudo")?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = writeln!(stdin, "{password}");
+    }
+
+    let output = child.wait_with_output().context("sudo validation failed")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("sudo: {}", stderr.trim());
+    }
+
+    scan()
 }
 
 fn build_inode_pid_map() -> Result<HashMap<u64, u32>> {

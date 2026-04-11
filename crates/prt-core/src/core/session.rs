@@ -16,8 +16,9 @@ use std::time::Instant;
 /// Encapsulates the full refresh cycle:
 /// `scan → diff → enrich → retain(gone) → sort`
 ///
-/// Stores sudo password (if elevated) so subsequent refreshes
-/// can re-authenticate without user interaction.
+/// Tracks whether sudo authentication was completed successfully.
+/// Subsequent refreshes use cached sudo credentials (`sudo -n`)
+/// without storing the password in memory.
 pub struct Session {
     pub entries: Vec<TrackedEntry>,
     pub sort: SortState,
@@ -25,7 +26,6 @@ pub struct Session {
     pub is_root: bool,
     pub config: PrtConfig,
     pub bandwidth: BandwidthTracker,
-    sudo_password: Option<String>,
 }
 
 impl Default for Session {
@@ -43,20 +43,27 @@ impl Session {
             is_root: scanner::is_root(),
             config: crate::config::load_config(),
             bandwidth: BandwidthTracker::new(),
-            sudo_password: None,
         }
     }
 
     /// Run a scan cycle: scan → diff → enrich → retain → sort.
     pub fn refresh(&mut self) -> Result<(), String> {
-        let scan_result = if let Some(password) = &self.sudo_password {
-            scanner::scan_with_sudo(password)
+        let was_elevated = self.is_elevated;
+        if was_elevated {
+            self.sync_elevation_state(scanner::has_elevated_access());
+        }
+
+        let scan_result = if self.is_elevated {
+            scanner::scan_elevated()
         } else {
             scanner::scan()
         };
 
         match scan_result {
             Ok(new_entries) => {
+                if was_elevated {
+                    self.sync_elevation_state(scanner::has_elevated_access());
+                }
                 let now = Instant::now();
                 self.entries = scanner::diff_entries(&self.entries, new_entries, now);
 
@@ -122,13 +129,15 @@ impl Session {
         }
     }
 
-    /// Get cached sudo password (if elevated). Used by firewall block.
-    pub fn sudo_password(&self) -> Option<&str> {
-        self.sudo_password.as_deref()
-    }
-
     pub fn filtered_indices(&self, query: &str) -> Vec<usize> {
         scanner::filter_indices(&self.entries, query)
+    }
+
+    fn sync_elevation_state(&mut self, has_elevated_access: bool) {
+        if self.is_elevated && !has_elevated_access {
+            self.is_elevated = false;
+            self.is_root = scanner::is_root();
+        }
     }
 
     /// Attempt sudo elevation with password. Returns status message.
@@ -136,7 +145,6 @@ impl Session {
         let s = i18n::strings();
         match scanner::scan_with_sudo(password) {
             Ok(new_entries) => {
-                self.sudo_password = Some(password.to_string());
                 self.is_elevated = true;
                 self.is_root = true;
                 let now = Instant::now();
@@ -159,7 +167,6 @@ impl Session {
                 s.sudo_elevated.to_string()
             }
             Err(e) => {
-                self.sudo_password = None;
                 self.is_elevated = false;
                 let msg = e.to_string();
                 if msg.contains("incorrect password") || msg.contains("Sorry") {
@@ -169,5 +176,22 @@ impl Session {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sync_elevation_state_clears_expired_sudo_cache() {
+        let mut session = Session::new();
+        session.is_elevated = true;
+        session.is_root = true;
+
+        session.sync_elevation_state(false);
+
+        assert!(!session.is_elevated);
+        assert_eq!(session.is_root, scanner::is_root());
     }
 }
