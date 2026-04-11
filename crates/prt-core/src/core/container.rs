@@ -24,10 +24,7 @@ pub fn resolve_container_names(pids: &[u32]) -> HashMap<u32, String> {
         return HashMap::new();
     }
 
-    // Try Docker first, fall back to Podman
-    docker_resolve(pids)
-        .or_else(|| podman_resolve(pids))
-        .unwrap_or_default()
+    select_runtime_names(docker_resolve(pids), podman_resolve(pids))
 }
 
 /// Check if any entries have container names (used for adaptive column).
@@ -170,6 +167,24 @@ fn run_with_timeout(cmd: &str, args: &[&str]) -> Option<String> {
     }
 }
 
+fn select_runtime_names(
+    docker_names: Option<HashMap<u32, String>>,
+    podman_names: Option<HashMap<u32, String>>,
+) -> HashMap<u32, String> {
+    match docker_names {
+        Some(names) if !names.is_empty() => names,
+        Some(names) => {
+            let fallback = podman_names.unwrap_or_default();
+            if fallback.is_empty() {
+                names
+            } else {
+                fallback
+            }
+        }
+        None => podman_names.unwrap_or_default(),
+    }
+}
+
 /// Parse a `docker ps` line into (id, name).
 #[cfg(test)]
 fn parse_ps_line(line: &str) -> Option<(String, String)> {
@@ -229,5 +244,29 @@ mod tests {
         let mut m = HashMap::new();
         m.insert(1, "nginx".to_string());
         assert!(has_containers(&m));
+    }
+
+    #[test]
+    fn select_runtime_names_prefers_podman_when_docker_is_empty() {
+        let docker = Some(HashMap::new());
+        let mut podman = HashMap::new();
+        podman.insert(42, "api".to_string());
+
+        let result = select_runtime_names(docker, Some(podman.clone()));
+
+        assert_eq!(result, podman);
+    }
+
+    #[test]
+    fn select_runtime_names_keeps_docker_when_it_has_matches() {
+        let mut docker = HashMap::new();
+        docker.insert(7, "web".to_string());
+
+        let mut podman = HashMap::new();
+        podman.insert(42, "api".to_string());
+
+        let result = select_runtime_names(Some(docker.clone()), Some(podman));
+
+        assert_eq!(result, docker);
     }
 }

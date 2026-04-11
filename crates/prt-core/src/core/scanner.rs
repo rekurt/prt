@@ -28,6 +28,11 @@ pub fn scan_elevated() -> Result<Vec<PortEntry>> {
     platform::scan_ports_elevated()
 }
 
+/// Returns `true` when cached elevated access is still available.
+pub fn has_elevated_access() -> bool {
+    platform::has_elevated_access()
+}
+
 /// Scan ports using an explicit sudo password (`sudo -S`).
 /// The password is piped to stdin; no tty required.
 pub fn scan_with_sudo(password: &str) -> Result<Vec<PortEntry>> {

@@ -19,6 +19,14 @@ pub fn scan() -> Result<Vec<PortEntry>> {
     parse_lsof_output(&stdout)
 }
 
+pub fn has_elevated_access() -> bool {
+    Command::new("sudo")
+        .args(["-n", "true"])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
 pub fn scan_elevated() -> Result<Vec<PortEntry>> {
     let output = Command::new("sudo")
         .args(["-n", "lsof", "-iTCP", "-iUDP", "-nP", "+c0", "-FnPpTtc"])
