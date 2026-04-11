@@ -46,6 +46,9 @@ pub fn scan() -> Result<Vec<PortEntry>> {
 pub fn has_elevated_access() -> bool {
     Command::new("sudo")
         .args(["-n", "true"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .map(|status| status.success())
         .unwrap_or(false)

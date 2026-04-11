@@ -48,7 +48,10 @@ impl Session {
 
     /// Run a scan cycle: scan → diff → enrich → retain → sort.
     pub fn refresh(&mut self) -> Result<(), String> {
-        self.sync_elevation_state(scanner::has_elevated_access());
+        let was_elevated = self.is_elevated;
+        if was_elevated {
+            self.sync_elevation_state(scanner::has_elevated_access());
+        }
 
         let scan_result = if self.is_elevated {
             scanner::scan_elevated()
@@ -58,7 +61,9 @@ impl Session {
 
         match scan_result {
             Ok(new_entries) => {
-                self.sync_elevation_state(scanner::has_elevated_access());
+                if was_elevated {
+                    self.sync_elevation_state(scanner::has_elevated_access());
+                }
                 let now = Instant::now();
                 self.entries = scanner::diff_entries(&self.entries, new_entries, now);
 
