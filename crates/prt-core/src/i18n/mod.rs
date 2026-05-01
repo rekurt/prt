@@ -135,7 +135,6 @@ pub struct Strings {
     pub no_selected_process: &'static str,
 
     // View mode labels (fullscreen views)
-    pub view_chart: &'static str,
     pub view_topology: &'static str,
     pub view_process: &'static str,
     pub view_namespaces: &'static str,

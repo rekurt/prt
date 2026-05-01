@@ -177,15 +177,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.show_details = true;
         }
 
-        // Keys 4-7: toggle fullscreen views (press again = back to Table)
-        KeyCode::Char('4') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::Chart {
-                ViewMode::Table
-            } else {
-                ViewMode::Chart
-            };
-        }
+        // Keys 5-7: toggle fullscreen views (press again = back to Table)
         KeyCode::Char('5') => {
             app.scroll_offset = 0;
             app.view_mode = if app.view_mode == ViewMode::Topology {

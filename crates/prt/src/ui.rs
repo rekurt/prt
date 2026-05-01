@@ -25,7 +25,6 @@ pub fn draw(f: &mut Frame, app: &App) {
     } else {
         match app.view_mode {
             ViewMode::Table => draw_table_view(f, app, chunks[1]),
-            ViewMode::Chart => draw_chart_fullscreen(f, app, chunks[1]),
             ViewMode::Topology => draw_topology_fullscreen(f, app, chunks[1]),
             ViewMode::ProcessDetail => draw_process_detail_fullscreen(f, app, chunks[1]),
             ViewMode::Namespaces => draw_namespaces_fullscreen(f, app, chunks[1]),
@@ -162,7 +161,6 @@ fn view_mode_label(mode: ViewMode) -> &'static str {
     let s = i18n::strings();
     match mode {
         ViewMode::Table => "",
-        ViewMode::Chart => s.view_chart,
         ViewMode::Topology => s.view_topology,
         ViewMode::ProcessDetail => s.view_process,
         ViewMode::Namespaces => s.view_namespaces,
@@ -531,66 +529,6 @@ fn draw_tab_connection(f: &mut Frame, app: &App, area: Rect) {
     }
 
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
-}
-
-// ── Fullscreen: Chart (connections per process) ──────────────────
-
-fn draw_chart_fullscreen(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {} ", s.view_chart))
-        .title_alignment(Alignment::Left)
-        .border_style(Style::default().fg(Color::Cyan));
-
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
-    // Also render the table at top with selection, chart below
-    if app.session.entries.is_empty() {
-        f.render_widget(Paragraph::new(s.no_selected_process), inner);
-        return;
-    }
-
-    // Group connections per process name
-    let counts: Vec<(String, usize)> = {
-        let mut map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-        for e in &app.session.entries {
-            if e.status != EntryStatus::Gone {
-                *map.entry(e.entry.process.name.clone()).or_insert(0) += 1;
-            }
-        }
-        let mut v: Vec<_> = map.into_iter().collect();
-        v.sort_by_key(|b| std::cmp::Reverse(b.1));
-        v
-    };
-    let max = counts.first().map(|c| c.1).unwrap_or(1).max(1);
-    let bar_width = inner.width.saturating_sub(25) as usize;
-
-    let lines: Vec<Line> = counts
-        .iter()
-        .map(|(name, count)| {
-            let bar_len = (*count as f64 / max as f64 * bar_width as f64).round() as usize;
-            let bar = "\u{2588}".repeat(bar_len);
-            let name_display = if name.len() > 14 {
-                format!("{:.14}", name)
-            } else {
-                format!("{:<14}", name)
-            };
-            Line::from(vec![
-                Span::styled(
-                    format!("  {name_display} "),
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::styled(bar, Style::default().fg(Color::Green)),
-                Span::raw(format!(" {count}")),
-            ])
-        })
-        .collect();
-
-    let max_scroll = (lines.len() as u16).saturating_sub(inner.height);
-    let scroll = app.scroll_offset.min(max_scroll);
-    f.render_widget(Paragraph::new(lines).scroll((scroll, 0)), inner);
 }
 
 // ── Fullscreen: Topology (process → port → remote) ──────────────
@@ -1251,7 +1189,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
             hint(&mut hints, "/", s.hint_search);
             if matches!(
                 app.view_mode,
-                ViewMode::ProcessDetail | ViewMode::Chart | ViewMode::Topology
+                ViewMode::ProcessDetail | ViewMode::Topology
             ) {
                 hint(&mut hints, "K", s.hint_kill);
             }

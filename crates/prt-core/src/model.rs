@@ -280,8 +280,6 @@ pub enum ViewMode {
     /// Normal port table (default view).
     #[default]
     Table,
-    /// Fullscreen bar chart: connections per process.
-    Chart,
     /// Fullscreen network topology: process → port → remote.
     Topology,
     /// Fullscreen process detail: cwd, env, files, CPU/RAM, connections.

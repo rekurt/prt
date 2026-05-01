@@ -14,7 +14,6 @@ pub static STRINGS: Strings = Strings {
     tab_connection: "连接",
     no_selected_process: " 未选择进程",
 
-    view_chart: "图表",
     view_topology: "拓扑",
     view_process: "进程详情",
     view_namespaces: "命名空间",
@@ -57,7 +56,6 @@ pub static STRINGS: Strings = Strings {
   h/l          切换标签页
 
   全屏模式:
-  4            图表 (每进程连接数)
   5            拓扑 (进程 → 端口 → 远程)
   6            进程详情 (信息、文件、环境变量)
   7            命名空间 (仅Linux)

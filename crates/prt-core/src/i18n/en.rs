@@ -14,7 +14,6 @@ pub static STRINGS: Strings = Strings {
     tab_connection: "Connection",
     no_selected_process: " no process selected",
 
-    view_chart: "Chart",
     view_topology: "Topology",
     view_process: "Process",
     view_namespaces: "Namespaces",
@@ -57,7 +56,6 @@ pub static STRINGS: Strings = Strings {
   h/l          switch detail tab
 
   Fullscreen views:
-  4            Chart (connections per process)
   5            Topology (process -> port -> remote)
   6            Process detail (info, files, env)
   7            Namespaces (Linux only)

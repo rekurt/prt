@@ -14,7 +14,6 @@ pub static STRINGS: Strings = Strings {
     tab_connection: "Соединение",
     no_selected_process: " нет выбранного процесса",
 
-    view_chart: "График",
     view_topology: "Топология",
     view_process: "Процесс",
     view_namespaces: "Namespaces",
@@ -57,7 +56,6 @@ pub static STRINGS: Strings = Strings {
   h/l          переключение вкладок
 
   Полноэкранные режимы:
-  4            График (соединения по процессам)
   5            Топология (процесс → порт → удалённый)
   6            Детали процесса (инфо, файлы, env)
   7            Namespaces (только Linux)
