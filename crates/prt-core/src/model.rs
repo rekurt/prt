@@ -228,24 +228,85 @@ impl SortState {
     }
 }
 
-/// Main view mode — what occupies the primary screen area.
+/// Top-level section. Tab / Shift+Tab cycles between sections.
 ///
-/// `Table` is the default: shows the port table (+ optional bottom detail panel).
-/// Other modes are fullscreen and replace the table entirely.
-/// Press `Esc` to return to `Table` from any other mode.
+/// `Connections` is the default: port table + bottom Details panel.
+/// `Processes` shows the selected entry's process detail / topology.
+/// `Ssh` aggregates SSH hosts and active tunnels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ViewMode {
-    /// Normal port table (default view).
+    /// Connections: port table + Details panel.
     #[default]
-    Table,
-    /// Fullscreen network topology: process → port → remote.
+    Connections,
+    /// Processes: Detail / Topology sub-tabs.
+    Processes,
+    /// SSH: Hosts / Tunnels sub-tabs.
+    Ssh,
+}
+
+impl ViewMode {
+    pub const ALL: &[ViewMode] = &[ViewMode::Connections, ViewMode::Processes, ViewMode::Ssh];
+
+    fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|&m| m == self)
+            .expect("all ViewMode variants must be listed in ALL")
+    }
+
+    pub fn next(self) -> Self {
+        Self::ALL[(self.index() + 1) % Self::ALL.len()]
+    }
+
+    pub fn prev(self) -> Self {
+        Self::ALL[(self.index() + Self::ALL.len() - 1) % Self::ALL.len()]
+    }
+}
+
+/// Sub-tab inside the Processes section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ProcessesTab {
+    #[default]
+    Detail,
     Topology,
-    /// Fullscreen process detail: cwd, env, files, CPU/RAM, connections.
-    ProcessDetail,
-    /// Fullscreen list of saved SSH hosts (from `~/.ssh/config` + prt config).
-    SshHosts,
-    /// Fullscreen SSH tunnels manager.
+}
+
+impl ProcessesTab {
+    pub const ALL: &[ProcessesTab] = &[ProcessesTab::Detail, ProcessesTab::Topology];
+
+    pub fn next(self) -> Self {
+        match self {
+            ProcessesTab::Detail => ProcessesTab::Topology,
+            ProcessesTab::Topology => ProcessesTab::Detail,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        self.next()
+    }
+}
+
+/// Sub-tab inside the SSH section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SshTab {
+    #[default]
+    Hosts,
     Tunnels,
+}
+
+impl SshTab {
+    pub const ALL: &[SshTab] = &[SshTab::Hosts, SshTab::Tunnels];
+
+    pub fn next(self) -> Self {
+        match self {
+            SshTab::Hosts => SshTab::Tunnels,
+            SshTab::Tunnels => SshTab::Hosts,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        self.next()
+    }
 }
 
 /// Output format for CLI export mode (`--export`).
@@ -341,8 +402,35 @@ mod tests {
     }
 
     #[test]
-    fn view_mode_default_is_table() {
-        assert_eq!(ViewMode::default(), ViewMode::Table);
+    fn view_mode_default_is_connections() {
+        assert_eq!(ViewMode::default(), ViewMode::Connections);
+    }
+
+    #[test]
+    fn view_mode_next_prev_cycle() {
+        let cases = [
+            (ViewMode::Connections, ViewMode::Processes),
+            (ViewMode::Processes, ViewMode::Ssh),
+            (ViewMode::Ssh, ViewMode::Connections),
+        ];
+        for (from, expected) in cases {
+            assert_eq!(from.next(), expected);
+            assert_eq!(expected.prev(), from);
+        }
+    }
+
+    #[test]
+    fn processes_tab_cycle() {
+        assert_eq!(ProcessesTab::Detail.next(), ProcessesTab::Topology);
+        assert_eq!(ProcessesTab::Topology.next(), ProcessesTab::Detail);
+        assert_eq!(ProcessesTab::default(), ProcessesTab::Detail);
+    }
+
+    #[test]
+    fn ssh_tab_cycle() {
+        assert_eq!(SshTab::Hosts.next(), SshTab::Tunnels);
+        assert_eq!(SshTab::Tunnels.next(), SshTab::Hosts);
+        assert_eq!(SshTab::default(), SshTab::Hosts);
     }
 
     // ── SortState toggle table ────────────────────────────────────

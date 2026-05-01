@@ -13,6 +13,10 @@ pub static STRINGS: Strings = Strings {
     detail_panel_tree_header: "Process tree:",
     no_selected_process: " no process selected",
 
+    section_connections: "Connections",
+    section_processes: "Processes",
+    section_ssh: "SSH",
+
     view_topology: "Topology",
     view_process: "Process",
 
@@ -91,17 +95,17 @@ pub static STRINGS: Strings = Strings {
 
     hint_back: "back",
     hint_details: "details",
-    hint_views: "views",
     hint_sort: "sort",
     hint_copy: "copy",
-    hint_block: "block IP",
-    hint_trace: "trace",
     hint_navigate: "navigate",
+    hint_section_next: "section",
+    hint_subtab: "tab",
+    hint_action_menu: "actions",
+    hint_edit_tunnel: "edit",
 
     forward_prompt_title: " SSH Forward ",
     forward_host_label: " host:port → ",
     forward_confirm_hint: " [Enter] create  [Esc] cancel",
-    hint_forward: "forward",
 
     view_ssh_hosts: "SSH Hosts",
     view_tunnels: "Tunnels",
@@ -138,8 +142,6 @@ pub static STRINGS: Strings = Strings {
     tunnel_form_hint: " [Tab] next  [\u{2190}\u{2192}] kind  [Enter] create  [Esc] cancel",
     tunnel_form_invalid: "invalid tunnel form",
 
-    hint_ssh_hosts: "ssh hosts",
-    hint_tunnels: "tunnels",
     hint_new_tunnel: "new",
     hint_kill_tunnel: "kill",
     hint_restart_tunnel: "restart",

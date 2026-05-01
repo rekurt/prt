@@ -1,7 +1,7 @@
 use crate::app::App;
 use crossterm::event::{KeyCode, KeyEvent};
 use prt_core::i18n;
-use prt_core::model::{SortColumn, ViewMode};
+use prt_core::model::{ProcessesTab, SortColumn, SshTab, ViewMode};
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
     if app.show_help {
@@ -104,13 +104,54 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
-    // Let SshHosts/Tunnels views consume their own navigation/action keys
-    // before generic handlers (so e.g. `s` in Tunnels means "save", not "sudo").
-    if app.view_mode == ViewMode::SshHosts && crate::views::ssh_hosts::handle_key(app, key) {
-        return;
+    // Section navigation: Tab / Shift+Tab cycles top-level sections.
+    match key.code {
+        KeyCode::Tab => {
+            app.view_mode = app.view_mode.next();
+            app.scroll_offset = 0;
+            return;
+        }
+        KeyCode::BackTab => {
+            app.view_mode = app.view_mode.prev();
+            app.scroll_offset = 0;
+            return;
+        }
+        _ => {}
     }
-    if app.view_mode == ViewMode::Tunnels && crate::views::tunnels::handle_key(app, key) {
-        return;
+
+    // Sub-tab cycling: [ / ] inside Processes and SSH.
+    match (app.view_mode, key.code) {
+        (ViewMode::Processes, KeyCode::Char('[')) => {
+            app.processes_tab = app.processes_tab.prev();
+            app.scroll_offset = 0;
+            return;
+        }
+        (ViewMode::Processes, KeyCode::Char(']')) => {
+            app.processes_tab = app.processes_tab.next();
+            app.scroll_offset = 0;
+            return;
+        }
+        (ViewMode::Ssh, KeyCode::Char('[')) => {
+            app.ssh_tab = app.ssh_tab.prev();
+            return;
+        }
+        (ViewMode::Ssh, KeyCode::Char(']')) => {
+            app.ssh_tab = app.ssh_tab.next();
+            return;
+        }
+        _ => {}
+    }
+
+    // Inside SSH section, delegate to the active sub-view's handler so it can
+    // claim its own action keys (e.g. `s` = save in Tunnels, not sudo).
+    if app.view_mode == ViewMode::Ssh {
+        let consumed = match app.ssh_tab {
+            SshTab::Hosts => crate::views::ssh_hosts::handle_key(app, key),
+            SshTab::Tunnels => crate::views::tunnels::handle_key(app, key),
+        };
+        if consumed {
+            return;
+        }
     }
 
     match key.code {
@@ -118,11 +159,8 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('?') => app.show_help = true,
         KeyCode::Char('/') => app.filter_mode = true,
         KeyCode::Esc => {
-            // Esc: return to Table from fullscreen views, or clear filter
-            if app.view_mode != ViewMode::Table {
-                app.view_mode = ViewMode::Table;
-                app.scroll_offset = 0;
-            } else if !app.filter.is_empty() {
+            // Esc: clear filter when in Connections, otherwise no-op (Tab navigates).
+            if !app.filter.is_empty() {
                 app.filter.clear();
                 app.update_filtered();
             }
@@ -136,15 +174,15 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.open_sudo_prompt(crate::app::SudoPurpose::Refresh);
         }
 
-        // Navigation (works in all view modes)
+        // Navigation
         KeyCode::Up | KeyCode::Char('k') => {
-            if app.view_mode == ViewMode::Table || app.view_mode == ViewMode::ProcessDetail {
+            if app.view_mode == ViewMode::Connections || app.view_mode == ViewMode::Processes {
                 app.selected = app.selected.saturating_sub(1);
             }
             app.scroll_offset = app.scroll_offset.saturating_sub(1);
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if app.view_mode == ViewMode::Table || app.view_mode == ViewMode::ProcessDetail {
+            if app.view_mode == ViewMode::Connections || app.view_mode == ViewMode::Processes {
                 app.selected = (app.selected + 1).min(app.filtered_indices.len().saturating_sub(1));
             }
             app.scroll_offset = app.scroll_offset.saturating_add(1);
@@ -155,49 +193,15 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
         KeyCode::End | KeyCode::Char('G') => {
             app.selected = app.filtered_indices.len().saturating_sub(1);
-            app.scroll_offset = u16::MAX; // will be clamped by rendering
+            app.scroll_offset = u16::MAX;
         }
 
-        // Toggle bottom detail panel (Table mode only)
-        KeyCode::Enter | KeyCode::Char('d') if app.view_mode == ViewMode::Table => {
+        // Toggle bottom Details panel (Connections only)
+        KeyCode::Enter | KeyCode::Char('d') if app.view_mode == ViewMode::Connections => {
             app.show_details = !app.show_details;
         }
 
-        // Keys 5-9: toggle fullscreen views (press again = back to Table)
-        KeyCode::Char('5') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::Topology {
-                ViewMode::Table
-            } else {
-                ViewMode::Topology
-            };
-        }
-        KeyCode::Char('6') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::ProcessDetail {
-                ViewMode::Table
-            } else {
-                ViewMode::ProcessDetail
-            };
-        }
-        KeyCode::Char('8') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::SshHosts {
-                ViewMode::Table
-            } else {
-                ViewMode::SshHosts
-            };
-        }
-        KeyCode::Char('9') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::Tunnels {
-                ViewMode::Table
-            } else {
-                ViewMode::Tunnels
-            };
-        }
-
-        // Kill
+        // Kill (always available, top-level shortcut)
         KeyCode::Char('K') | KeyCode::Delete => {
             if let Some(entry) = app.selected_entry() {
                 let pid = entry.entry.process.pid;
@@ -206,7 +210,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
         }
 
-        // Copy
+        // Copy (always available, top-level shortcut)
         KeyCode::Char('c') => {
             if let Some(entry) = app.selected_entry() {
                 let text = format!(
@@ -219,31 +223,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.copy_to_clipboard(&text);
             }
         }
-        KeyCode::Char('p') => {
-            if let Some(entry) = app.selected_entry() {
-                let text = entry.entry.process.pid.to_string();
-                app.copy_to_clipboard(&text);
-            }
-        }
 
-        // Firewall block
-        KeyCode::Char('b') => {
-            app.initiate_block();
-        }
-
-        // Strace attach/detach
-        KeyCode::Char('t') => {
-            app.toggle_tracer();
-        }
-
-        // SSH port forwarding
-        KeyCode::Char('F') if app.selected_entry().is_some() => {
-            app.forward_prompt = true;
-            app.forward_input.clear();
-        }
-
-        // Sort (Table mode)
-        KeyCode::Tab if app.view_mode == ViewMode::Table => {
+        // Sort (Connections only): o = next column, O = reverse direction.
+        KeyCode::Char('o') if app.view_mode == ViewMode::Connections => {
             let cols = [
                 SortColumn::Port,
                 SortColumn::Service,
@@ -261,9 +243,16 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.session.sort.toggle(cols[next]);
             app.refresh();
         }
-        KeyCode::BackTab if app.view_mode == ViewMode::Table => {
+        KeyCode::Char('O') if app.view_mode == ViewMode::Connections => {
             app.session.sort.ascending = !app.session.sort.ascending;
             app.refresh();
+        }
+
+        // Switch to Processes from Connections: ProcessesTab::Detail by default.
+        KeyCode::Char('P') => {
+            app.view_mode = ViewMode::Processes;
+            app.processes_tab = ProcessesTab::Detail;
+            app.scroll_offset = 0;
         }
 
         // Language

@@ -133,7 +133,12 @@ pub struct Strings {
     pub detail_panel_tree_header: &'static str,
     pub no_selected_process: &'static str,
 
-    // View mode labels (fullscreen views)
+    // Top-level section labels
+    pub section_connections: &'static str,
+    pub section_processes: &'static str,
+    pub section_ssh: &'static str,
+
+    // Sub-view labels
     pub view_topology: &'static str,
     pub view_process: &'static str,
 
@@ -187,18 +192,18 @@ pub struct Strings {
     // Footer hints — context-specific
     pub hint_back: &'static str,
     pub hint_details: &'static str,
-    pub hint_views: &'static str,
     pub hint_sort: &'static str,
     pub hint_copy: &'static str,
-    pub hint_block: &'static str,
-    pub hint_trace: &'static str,
     pub hint_navigate: &'static str,
+    pub hint_section_next: &'static str,
+    pub hint_subtab: &'static str,
+    pub hint_action_menu: &'static str,
+    pub hint_edit_tunnel: &'static str,
 
     // Forward dialog
     pub forward_prompt_title: &'static str,
     pub forward_host_label: &'static str,
     pub forward_confirm_hint: &'static str,
-    pub hint_forward: &'static str,
 
     // SSH hosts / tunnels views
     pub view_ssh_hosts: &'static str,
@@ -239,8 +244,6 @@ pub struct Strings {
     pub tunnel_form_invalid: &'static str,
 
     // Footer hints — ssh views
-    pub hint_ssh_hosts: &'static str,
-    pub hint_tunnels: &'static str,
     pub hint_new_tunnel: &'static str,
     pub hint_kill_tunnel: &'static str,
     pub hint_restart_tunnel: &'static str,

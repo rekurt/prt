@@ -13,6 +13,10 @@ pub static STRINGS: Strings = Strings {
     detail_panel_tree_header: "Дерево процессов:",
     no_selected_process: " нет выбранного процесса",
 
+    section_connections: "Соединения",
+    section_processes: "Процессы",
+    section_ssh: "SSH",
+
     view_topology: "Топология",
     view_process: "Процесс",
 
@@ -91,17 +95,17 @@ pub static STRINGS: Strings = Strings {
 
     hint_back: "назад",
     hint_details: "детали",
-    hint_views: "режимы",
     hint_sort: "сорт.",
     hint_copy: "копир.",
-    hint_block: "блок. IP",
-    hint_trace: "трасс.",
     hint_navigate: "навиг.",
+    hint_section_next: "раздел",
+    hint_subtab: "вкладка",
+    hint_action_menu: "действия",
+    hint_edit_tunnel: "правка",
 
     forward_prompt_title: " SSH-туннель ",
     forward_host_label: " хост:порт → ",
     forward_confirm_hint: " [Enter] создать  [Esc] отмена",
-    hint_forward: "туннель",
 
     view_ssh_hosts: "SSH хосты",
     view_tunnels: "Туннели",
@@ -138,8 +142,6 @@ pub static STRINGS: Strings = Strings {
     tunnel_form_hint: " [Tab] след.  [\u{2190}\u{2192}] тип  [Enter] создать  [Esc] отмена",
     tunnel_form_invalid: "неверные поля туннеля",
 
-    hint_ssh_hosts: "SSH хосты",
-    hint_tunnels: "туннели",
     hint_new_tunnel: "новый",
     hint_kill_tunnel: "убить",
     hint_restart_tunnel: "рестарт",

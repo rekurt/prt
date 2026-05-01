@@ -13,6 +13,10 @@ pub static STRINGS: Strings = Strings {
     detail_panel_tree_header: "进程树:",
     no_selected_process: " 未选择进程",
 
+    section_connections: "连接",
+    section_processes: "进程",
+    section_ssh: "SSH",
+
     view_topology: "拓扑",
     view_process: "进程详情",
 
@@ -91,17 +95,17 @@ pub static STRINGS: Strings = Strings {
 
     hint_back: "返回",
     hint_details: "详情",
-    hint_views: "视图",
     hint_sort: "排序",
     hint_copy: "复制",
-    hint_block: "封锁IP",
-    hint_trace: "跟踪",
     hint_navigate: "导航",
+    hint_section_next: "分区",
+    hint_subtab: "标签",
+    hint_action_menu: "操作",
+    hint_edit_tunnel: "编辑",
 
     forward_prompt_title: " SSH隧道 ",
     forward_host_label: " 主机:端口 → ",
     forward_confirm_hint: " [Enter] 创建  [Esc] 取消",
-    hint_forward: "转发",
 
     view_ssh_hosts: "SSH 主机",
     view_tunnels: "隧道",
@@ -137,8 +141,6 @@ pub static STRINGS: Strings = Strings {
     tunnel_form_hint: " [Tab] 下一项  [\u{2190}\u{2192}] 类型  [Enter] 创建  [Esc] 取消",
     tunnel_form_invalid: "隧道字段无效",
 
-    hint_ssh_hosts: "SSH 主机",
-    hint_tunnels: "隧道",
     hint_new_tunnel: "新建",
     hint_kill_tunnel: "终止",
     hint_restart_tunnel: "重启",

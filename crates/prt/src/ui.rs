@@ -1,7 +1,9 @@
 use crate::app::App;
 use prt_core::core::{bandwidth, process_detail, scanner};
 use prt_core::i18n;
-use prt_core::model::{ConnectionState, EntryStatus, SortColumn, TrackedEntry, ViewMode};
+use prt_core::model::{
+    ConnectionState, EntryStatus, ProcessesTab, SortColumn, SshTab, TrackedEntry, ViewMode,
+};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use std::time::{Duration, Instant};
@@ -22,11 +24,9 @@ pub fn draw(f: &mut Frame, app: &App) {
         draw_help(f, chunks[1]);
     } else {
         match app.view_mode {
-            ViewMode::Table => draw_table_view(f, app, chunks[1]),
-            ViewMode::Topology => draw_topology_fullscreen(f, app, chunks[1]),
-            ViewMode::ProcessDetail => draw_process_detail_fullscreen(f, app, chunks[1]),
-            ViewMode::SshHosts => crate::views::ssh_hosts::draw(f, app, chunks[1]),
-            ViewMode::Tunnels => crate::views::tunnels::draw(f, app, chunks[1]),
+            ViewMode::Connections => draw_table_view(f, app, chunks[1]),
+            ViewMode::Processes => draw_processes_view(f, app, chunks[1]),
+            ViewMode::Ssh => draw_ssh_view(f, app, chunks[1]),
         }
     }
 
@@ -75,6 +75,20 @@ fn draw_table_view(f: &mut Frame, app: &App, area: Rect) {
         }
     } else {
         draw_table(f, app, area);
+    }
+}
+
+fn draw_processes_view(f: &mut Frame, app: &App, area: Rect) {
+    match app.processes_tab {
+        ProcessesTab::Detail => draw_process_detail_fullscreen(f, app, area),
+        ProcessesTab::Topology => draw_topology_fullscreen(f, app, area),
+    }
+}
+
+fn draw_ssh_view(f: &mut Frame, app: &App, area: Rect) {
+    match app.ssh_tab {
+        SshTab::Hosts => crate::views::ssh_hosts::draw(f, app, area),
+        SshTab::Tunnels => crate::views::tunnels::draw(f, app, area),
     }
 }
 
@@ -142,26 +156,46 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         parts.push(Span::styled(label, Style::default().fg(Color::Cyan)));
     }
 
-    // View mode indicator (when not in Table)
-    if app.view_mode != ViewMode::Table {
-        let label = view_mode_label(app.view_mode);
+    // Section breadcrumb: [Connections | Processes | Ssh]  with active highlighted.
+    parts.push(Span::raw("  "));
+    for &mode in ViewMode::ALL {
+        let label = section_label(mode);
+        let style = if mode == app.view_mode {
+            Style::default().fg(Color::Black).bg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+        parts.push(Span::styled(format!(" {label} "), style));
+        parts.push(Span::raw(" "));
+    }
+    // Sub-tab indicator
+    let sub = match app.view_mode {
+        ViewMode::Connections => None,
+        ViewMode::Processes => Some(match app.processes_tab {
+            ProcessesTab::Detail => i18n::strings().view_process,
+            ProcessesTab::Topology => i18n::strings().view_topology,
+        }),
+        ViewMode::Ssh => Some(match app.ssh_tab {
+            SshTab::Hosts => i18n::strings().view_ssh_hosts,
+            SshTab::Tunnels => i18n::strings().view_tunnels,
+        }),
+    };
+    if let Some(sub) = sub {
         parts.push(Span::styled(
-            format!(" [{label}] "),
-            Style::default().fg(Color::Black).bg(Color::Yellow),
+            format!("[{sub}]"),
+            Style::default().fg(Color::Cyan),
         ));
     }
 
     f.render_widget(Line::from(parts), area);
 }
 
-fn view_mode_label(mode: ViewMode) -> &'static str {
+fn section_label(mode: ViewMode) -> &'static str {
     let s = i18n::strings();
     match mode {
-        ViewMode::Table => "",
-        ViewMode::Topology => s.view_topology,
-        ViewMode::ProcessDetail => s.view_process,
-        ViewMode::SshHosts => s.view_ssh_hosts,
-        ViewMode::Tunnels => s.view_tunnels,
+        ViewMode::Connections => s.section_connections,
+        ViewMode::Processes => s.section_processes,
+        ViewMode::Ssh => s.section_ssh,
     }
 }
 
@@ -971,62 +1005,48 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
 
     let mut hints: Vec<Span> = Vec::new();
 
+    // Common hints across all sections
+    hint(&mut hints, "?", s.hint_help);
+    hint(&mut hints, "Tab", s.hint_section_next);
+    hint(&mut hints, "/", s.hint_search);
+    hint(&mut hints, "Space", s.hint_action_menu);
+
     match app.view_mode {
-        ViewMode::Table => {
-            // Table mode: context depends on whether detail panel is open
-            hint(&mut hints, "?", s.hint_help);
-            hint(&mut hints, "/", s.hint_search);
+        ViewMode::Connections => {
             if !app.show_details {
                 hint(&mut hints, "d", s.hint_details);
             }
-            hint(&mut hints, "4-7", s.hint_views);
-            hint(&mut hints, "8", s.hint_ssh_hosts);
-            hint(&mut hints, "9", s.hint_tunnels);
             hint(&mut hints, "K", s.hint_kill);
-            hint(&mut hints, "F", s.hint_forward);
-            hint(&mut hints, "Tab", s.hint_sort);
-            if !app.session.is_root && !app.session.is_elevated {
-                hint(&mut hints, "s", s.hint_sudo);
-            }
-            hint(&mut hints, "q", s.hint_quit);
+            hint(&mut hints, "c", s.hint_copy);
+            hint(&mut hints, "o/O", s.hint_sort);
         }
-        ViewMode::SshHosts => {
-            hint(&mut hints, "Esc", s.hint_back);
-            hint(&mut hints, "j/k", s.hint_navigate);
-            hint(&mut hints, "Enter", s.hint_open_tunnel);
-            hint(&mut hints, "r", s.hint_reload);
-            hint(&mut hints, "?", s.hint_help);
-            hint(&mut hints, "q", s.hint_quit);
+        ViewMode::Processes => {
+            hint(&mut hints, "[ ]", s.hint_subtab);
+            hint(&mut hints, "K", s.hint_kill);
+            hint(&mut hints, "c", s.hint_copy);
         }
-        ViewMode::Tunnels => {
-            hint(&mut hints, "Esc", s.hint_back);
-            hint(&mut hints, "j/k", s.hint_navigate);
-            hint(&mut hints, "n", s.hint_new_tunnel);
-            hint(&mut hints, "K", s.hint_kill_tunnel);
-            hint(&mut hints, "r", s.hint_restart_tunnel);
-            hint(&mut hints, "s", s.hint_save_tunnels);
-            hint(&mut hints, "?", s.hint_help);
-            hint(&mut hints, "q", s.hint_quit);
-        }
-        _ => {
-            // Fullscreen views: Esc is prominent, then relevant actions
-            hint(&mut hints, "Esc", s.hint_back);
-            hint(&mut hints, "j/k", s.hint_navigate);
-            hint(&mut hints, "/", s.hint_search);
-            if matches!(
-                app.view_mode,
-                ViewMode::ProcessDetail | ViewMode::Topology
-            ) {
-                hint(&mut hints, "K", s.hint_kill);
+        ViewMode::Ssh => {
+            hint(&mut hints, "[ ]", s.hint_subtab);
+            match app.ssh_tab {
+                SshTab::Hosts => {
+                    hint(&mut hints, "Enter", s.hint_open_tunnel);
+                    hint(&mut hints, "r", s.hint_reload);
+                }
+                SshTab::Tunnels => {
+                    hint(&mut hints, "n", s.hint_new_tunnel);
+                    hint(&mut hints, "e", s.hint_edit_tunnel);
+                    hint(&mut hints, "K", s.hint_kill_tunnel);
+                    hint(&mut hints, "r", s.hint_restart_tunnel);
+                    hint(&mut hints, "s", s.hint_save_tunnels);
+                }
             }
-            if app.view_mode == ViewMode::ProcessDetail {
-                hint(&mut hints, "c", s.hint_copy);
-                hint(&mut hints, "t", s.hint_trace);
-            }
-            hint(&mut hints, "?", s.hint_help);
-            hint(&mut hints, "q", s.hint_quit);
         }
     }
+
+    if !app.session.is_root && !app.session.is_elevated && app.view_mode == ViewMode::Connections {
+        hint(&mut hints, "s", s.hint_sudo);
+    }
+    hint(&mut hints, "q", s.hint_quit);
 
     // Language badge (always rightmost)
     hints.push(Span::raw(" "));

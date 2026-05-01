@@ -12,7 +12,7 @@ use prt_core::core::ssh_config::{self, SshHost};
 use prt_core::core::ssh_tunnel::SshTunnelSpec;
 use prt_core::core::{killer, process_detail, session::Session};
 use prt_core::i18n;
-use prt_core::model::{TrackedEntry, ViewMode, TICK_RATE};
+use prt_core::model::{ProcessesTab, SshTab, TrackedEntry, ViewMode, TICK_RATE};
 
 use crate::forward::ForwardManager;
 use crate::tracer::StraceSession;
@@ -38,8 +38,12 @@ pub struct App {
     pub filter_mode: bool,
     pub show_help: bool,
     pub show_details: bool,
-    /// Main view mode: Table, Topology, ProcessDetail.
+    /// Top-level section.
     pub view_mode: ViewMode,
+    /// Sub-tab inside the Processes section.
+    pub processes_tab: ProcessesTab,
+    /// Sub-tab inside the SSH section.
+    pub ssh_tab: SshTab,
     pub confirm_kill: Option<(u32, String)>,
     pub sudo_prompt: bool,
     pub sudo_password: String,
@@ -85,6 +89,8 @@ impl App {
             show_help: false,
             show_details: true,
             view_mode: ViewMode::default(),
+            processes_tab: ProcessesTab::default(),
+            ssh_tab: SshTab::default(),
             confirm_kill: None,
             sudo_prompt: false,
             sudo_password: String::new(),
@@ -477,8 +483,10 @@ pub fn run() -> Result<()> {
     app.refresh();
 
     loop {
-        // Populate detail cache if ProcessDetail view is visible (avoids per-frame fetch)
-        if app.view_mode == ViewMode::ProcessDetail {
+        // Populate detail cache when Processes/Detail view is visible (avoids per-frame fetch)
+        if app.view_mode == ViewMode::Processes
+            && app.processes_tab == prt_core::model::ProcessesTab::Detail
+        {
             app.get_process_detail();
         }
 
