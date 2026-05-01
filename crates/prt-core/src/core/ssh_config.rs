@@ -61,29 +61,51 @@ pub fn default_ssh_config_path() -> Option<PathBuf> {
 }
 
 /// Parse `~/.ssh/config` (or any file with that grammar). Resolves
-/// `Include` directives relative to the config file's parent directory,
-/// matching OpenSSH semantics (capped at a small recursion depth so
-/// circular includes don't loop forever). On failure, returns an empty
-/// list — this is best-effort enrichment.
+/// `Include` directives relative to the SSH config root (the parent
+/// directory of the top-level file, e.g. `~/.ssh/`), matching OpenSSH
+/// semantics. Recursion is capped at [`MAX_INCLUDE_DEPTH`] so circular
+/// includes don't loop. On failure, returns an empty list — this is
+/// best-effort enrichment.
 pub fn parse_ssh_config(path: &Path) -> Vec<SshHost> {
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };
-    parse_ssh_config_with_base(&content, path.parent(), 0)
+    let mut result: Vec<SshHost> = Vec::new();
+    let mut current: Vec<usize> = Vec::new();
+    parse_ssh_config_inner(&content, path.parent(), 0, &mut result, &mut current);
+    result
 }
 
 #[cfg(test)]
 fn parse_ssh_config_str(content: &str) -> Vec<SshHost> {
-    parse_ssh_config_with_base(content, None, 0)
+    let mut result: Vec<SshHost> = Vec::new();
+    let mut current: Vec<usize> = Vec::new();
+    parse_ssh_config_inner(content, None, 0, &mut result, &mut current);
+    result
 }
 
 const MAX_INCLUDE_DEPTH: u32 = 16;
 
-fn parse_ssh_config_with_base(content: &str, base_dir: Option<&Path>, depth: u32) -> Vec<SshHost> {
-    let mut result: Vec<SshHost> = Vec::new();
-    let mut current: Vec<usize> = Vec::new(); // indices into result for active aliases
-
+/// Recursive parser body.
+///
+/// `root_dir` is the SSH config root (the directory of the *top-level*
+/// file) and stays the same across nested `Include` calls. Relative
+/// include paths are resolved against it.
+///
+/// `result` and `current` are shared across recursion. When an `Include`
+/// is encountered the outer `current` is snapshotted and a fresh copy is
+/// passed into the nested parse — that way directives without their own
+/// `Host` block in the included file still apply to the outer block,
+/// while the outer `current` is restored unchanged after the include
+/// returns (matching OpenSSH).
+fn parse_ssh_config_inner(
+    content: &str,
+    root_dir: Option<&Path>,
+    depth: u32,
+    result: &mut Vec<SshHost>,
+    current: &mut Vec<usize>,
+) {
     for raw_line in content.lines() {
         let trimmed = strip_inline_comment(raw_line.trim());
         if trimmed.is_empty() {
@@ -102,20 +124,17 @@ fn parse_ssh_config_with_base(content: &str, base_dir: Option<&Path>, depth: u32
             }
             for token in value.split_whitespace() {
                 let raw = strip_quotes(token);
-                for include_path in resolve_include(raw, base_dir) {
+                for include_path in resolve_include(raw, root_dir) {
                     if let Ok(included) = fs::read_to_string(&include_path) {
-                        let nested =
-                            parse_ssh_config_with_base(&included, include_path.parent(), depth + 1);
-                        for host in nested {
-                            result.push(host);
-                        }
+                        // Snapshot outer scope; nested file inherits it
+                        // but cannot mutate the caller's selection.
+                        let mut nested = current.clone();
+                        parse_ssh_config_inner(&included, root_dir, depth + 1, result, &mut nested);
                     }
                 }
             }
-            // Includes terminate the current host context per OpenSSH
-            // — directives after Include apply at top level until the
-            // next `Host` block.
-            current.clear();
+            // `current` deliberately left intact: directives following
+            // an Include inside the same Host block still apply.
             continue;
         }
 
@@ -147,7 +166,7 @@ fn parse_ssh_config_with_base(content: &str, base_dir: Option<&Path>, depth: u32
             continue;
         }
         let value = strip_quotes(value).to_string();
-        for &idx in &current {
+        for &idx in current.iter() {
             let host = &mut result[idx];
             match key_lc.as_str() {
                 "hostname" => host.hostname = Some(value.clone()),
@@ -162,20 +181,19 @@ fn parse_ssh_config_with_base(content: &str, base_dir: Option<&Path>, depth: u32
             }
         }
     }
-
-    result
 }
 
 /// Resolve one `Include` token into a list of concrete file paths.
 ///
 /// - `~/...` is expanded via `dirs::home_dir`.
-/// - Relative paths are resolved against `base_dir` (typically the parent
-///   of the config file currently being parsed), matching OpenSSH semantics.
-/// - If the final path contains a single `*` or `?` glob in its basename,
+/// - Relative paths are resolved against `root_dir` (the SSH config root,
+///   typically `~/.ssh/` or `/etc/ssh/`), matching OpenSSH semantics —
+///   including for nested includes.
+/// - If the final path contains a `*` or `?` glob in its basename,
 ///   the parent directory is listed and entries matching the basename
 ///   pattern are returned. Globs in directory components are not supported
 ///   (rare in real configs).
-fn resolve_include(raw: &str, base_dir: Option<&Path>) -> Vec<PathBuf> {
+fn resolve_include(raw: &str, root_dir: Option<&Path>) -> Vec<PathBuf> {
     if raw.is_empty() {
         return Vec::new();
     }
@@ -189,7 +207,7 @@ fn resolve_include(raw: &str, base_dir: Option<&Path>) -> Vec<PathBuf> {
         if p.is_absolute() {
             p
         } else {
-            match base_dir {
+            match root_dir {
                 Some(b) => b.join(p),
                 None => p,
             }
@@ -425,6 +443,83 @@ mod tests {
         assert!(aliases.contains(&"a"));
         assert!(aliases.contains(&"b"));
         assert_eq!(aliases.len(), 2);
+    }
+
+    #[test]
+    fn parse_include_resolves_relative_to_ssh_root() {
+        // Layout:
+        //   <root>/config       — top-level (root_dir = <root>)
+        //   <root>/sibling.conf — referenced as `Include sibling.conf`
+        //                         from inside <root>/sub/nested.conf
+        //   <root>/sub/nested.conf — referenced from top-level
+        //
+        // OpenSSH resolves relative includes against the SSH config root
+        // (parent of top-level file), regardless of where the include
+        // statement appears. Resolving against the parent of the *current*
+        // file would look for <root>/sub/sibling.conf and miss the alias.
+        let dir = tmpdir();
+        let sub = dir.join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(dir.join("sibling.conf"), "Host sibling\n  HostName s\n").unwrap();
+        std::fs::write(
+            sub.join("nested.conf"),
+            "Host inner\n  HostName i\nInclude sibling.conf\n",
+        )
+        .unwrap();
+        let main = dir.join("config");
+        std::fs::write(
+            &main,
+            format!("Include {}\n", sub.join("nested.conf").display()),
+        )
+        .unwrap();
+
+        let hosts = parse_ssh_config(&main);
+        let aliases: Vec<_> = hosts.iter().map(|h| h.alias.as_str()).collect();
+        assert!(aliases.contains(&"inner"), "{aliases:?}");
+        assert!(
+            aliases.contains(&"sibling"),
+            "relative Include resolved against wrong root: {aliases:?}"
+        );
+    }
+
+    #[test]
+    fn parse_include_inside_host_keeps_block_active() {
+        // `Host prod` is followed by `Include` and then `Port 2222`.
+        // The trailing Port must apply to prod despite the Include.
+        let dir = tmpdir();
+        let frag = dir.join("frag.conf");
+        std::fs::write(&frag, "Host other\n  HostName o\n").unwrap();
+        let main = dir.join("config");
+        std::fs::write(
+            &main,
+            format!(
+                "Host prod\n  HostName p\nInclude {}\n  Port 2222\n  User deploy\n",
+                frag.display()
+            ),
+        )
+        .unwrap();
+
+        let hosts = parse_ssh_config(&main);
+        let prod = hosts
+            .iter()
+            .find(|h| h.alias == "prod")
+            .expect("prod missing");
+        assert_eq!(prod.hostname.as_deref(), Some("p"));
+        assert_eq!(prod.port, Some(2222), "Port lost after Include");
+        assert_eq!(
+            prod.user.as_deref(),
+            Some("deploy"),
+            "User lost after Include"
+        );
+
+        // Included `Host other` must not contaminate prod nor disappear.
+        let other = hosts
+            .iter()
+            .find(|h| h.alias == "other")
+            .expect("other missing");
+        assert_eq!(other.hostname.as_deref(), Some("o"));
+        // Outer Port must NOT have leaked into the included host.
+        assert_eq!(other.port, None);
     }
 
     #[test]
