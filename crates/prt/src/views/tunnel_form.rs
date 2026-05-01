@@ -50,10 +50,7 @@ impl TunnelFormState {
                 .remote_host
                 .clone()
                 .unwrap_or_else(|| "127.0.0.1".into()),
-            remote_port: spec
-                .remote_port
-                .map(|p| p.to_string())
-                .unwrap_or_default(),
+            remote_port: spec.remote_port.map(|p| p.to_string()).unwrap_or_default(),
             host_alias: spec.host_alias.clone(),
             focused: TunnelFormField::LocalPort,
             editing_idx: Some(idx),

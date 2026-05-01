@@ -408,10 +408,7 @@ fn draw_detail_panel(f: &mut Frame, app: &App, area: Rect) {
     let mut lines = vec![
         Line::from(vec![
             Span::styled(s.conn_local, Style::default().fg(Color::Cyan)),
-            Span::raw(format!(
-                "{}  {}  ({})",
-                e.local_addr, e.protocol, bind_type
-            )),
+            Span::raw(format!("{}  {}  ({})", e.local_addr, e.protocol, bind_type)),
         ]),
         Line::from(vec![
             Span::styled(s.iface_interface, Style::default().fg(Color::Cyan)),
