@@ -77,6 +77,9 @@ pub struct App {
     pub tunnel_form: Option<TunnelFormState>,
     /// Active action menu overlay (Space-key popup), if any.
     pub action_menu: Option<ActionMenu>,
+    /// Timestamp of the last Esc press; used to arm the cascade
+    /// (e.g. press Esc once to be warned, twice in <1.5s to clear filter).
+    pub last_esc: Option<Instant>,
 }
 
 impl App {
@@ -113,6 +116,7 @@ impl App {
             tunnels_selected: 0,
             tunnel_form: None,
             action_menu: None,
+            last_esc: None,
         };
         app.autostart_tunnels();
         app

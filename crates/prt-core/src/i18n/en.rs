@@ -111,6 +111,9 @@ pub static STRINGS: Strings = Strings {
     action_trace: "Trace syscalls",
     action_forward: "SSH forward",
 
+    esc_again_to_clear_filter: "Esc again to clear filter",
+    esc_again_to_discard_form: "Esc again to discard changes",
+
     forward_prompt_title: " SSH Forward ",
     forward_host_label: " host:port → ",
     forward_confirm_hint: " [Enter] create  [Esc] cancel",

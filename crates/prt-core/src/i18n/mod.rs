@@ -209,6 +209,10 @@ pub struct Strings {
     pub action_trace: &'static str,
     pub action_forward: &'static str,
 
+    // Esc cascade hints
+    pub esc_again_to_clear_filter: &'static str,
+    pub esc_again_to_discard_form: &'static str,
+
     // Forward dialog
     pub forward_prompt_title: &'static str,
     pub forward_host_label: &'static str,

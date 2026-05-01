@@ -111,6 +111,9 @@ pub static STRINGS: Strings = Strings {
     action_trace: "跟踪系统调用",
     action_forward: "SSH 转发",
 
+    esc_again_to_clear_filter: "再按 Esc 清除过滤",
+    esc_again_to_discard_form: "再按 Esc 放弃更改",
+
     forward_prompt_title: " SSH隧道 ",
     forward_host_label: " 主机:端口 → ",
     forward_confirm_hint: " [Enter] 创建  [Esc] 取消",
