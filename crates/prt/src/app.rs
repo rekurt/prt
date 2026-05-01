@@ -131,7 +131,8 @@ impl App {
                     continue;
                 }
             };
-            match self.forwards.add_spec(spec) {
+            let host = self.host_for_alias(&spec.host_alias).cloned();
+            match self.forwards.add_spec_with_host(spec, host.as_ref()) {
                 Ok(_) => started += 1,
                 Err(_) => failed += 1,
             }
@@ -141,8 +142,16 @@ impl App {
         }
     }
 
-    /// Reload SSH hosts from disk + config.
+    /// Look up a known host by alias.
+    fn host_for_alias(&self, alias: &str) -> Option<&SshHost> {
+        self.ssh_hosts.iter().find(|h| h.alias == alias)
+    }
+
+    /// Reload SSH hosts: re-reads `~/.config/prt/config.toml` from disk so
+    /// edits made while prt is running take effect, then merges with
+    /// `~/.ssh/config`.
     pub fn reload_ssh_hosts(&mut self) {
+        self.session.config = config::load_config();
         self.ssh_hosts = ssh_config::load_known_hosts(&self.session.config.ssh_hosts);
         if self.ssh_hosts_selected >= self.ssh_hosts.len() {
             self.ssh_hosts_selected = self.ssh_hosts.len().saturating_sub(1);
@@ -159,7 +168,8 @@ impl App {
     /// Spawn a tunnel from a fully-validated spec.
     pub fn create_tunnel(&mut self, spec: SshTunnelSpec) {
         let summary = spec.summary();
-        match self.forwards.add_spec(spec) {
+        let host = self.host_for_alias(&spec.host_alias).cloned();
+        match self.forwards.add_spec_with_host(spec, host.as_ref()) {
             Ok(_) => {
                 self.tunnels_selected = self.forwards.tunnels.len().saturating_sub(1);
                 self.set_status(format!("tunnel: {summary}"));
@@ -171,11 +181,27 @@ impl App {
         }
     }
 
-    /// Kill the tunnel at `idx` and adjust the selection.
-    pub fn kill_tunnel(&mut self, idx: usize) {
-        if idx >= self.forwards.tunnels.len() {
-            return;
+    /// Clamp `tunnels_selected` into the current tunnel list. Called before
+    /// dispatching kill/restart actions so async `cleanup()` can't leave the
+    /// stored index pointing past the end.
+    fn clamp_tunnels_selected(&mut self) -> Option<usize> {
+        let count = self.forwards.tunnels.len();
+        if count == 0 {
+            self.tunnels_selected = 0;
+            return None;
         }
+        if self.tunnels_selected >= count {
+            self.tunnels_selected = count - 1;
+        }
+        Some(self.tunnels_selected)
+    }
+
+    /// Kill the currently selected tunnel and adjust the selection.
+    pub fn kill_selected_tunnel(&mut self) {
+        let idx = match self.clamp_tunnels_selected() {
+            Some(i) => i,
+            None => return,
+        };
         self.forwards.kill_at(idx);
         if self.tunnels_selected >= self.forwards.tunnels.len() {
             self.tunnels_selected = self.forwards.tunnels.len().saturating_sub(1);
@@ -184,8 +210,12 @@ impl App {
         self.set_status(s.tunnel_killed.into());
     }
 
-    /// Restart the tunnel at `idx`.
-    pub fn restart_tunnel(&mut self, idx: usize) {
+    /// Restart the currently selected tunnel.
+    pub fn restart_selected_tunnel(&mut self) {
+        let idx = match self.clamp_tunnels_selected() {
+            Some(i) => i,
+            None => return,
+        };
         let s = i18n::strings();
         match self.forwards.restart_at(idx) {
             Ok(()) => self.set_status(s.tunnel_restarted.into()),

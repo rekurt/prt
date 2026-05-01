@@ -125,11 +125,11 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
             true
         }
         KeyCode::Char('K') | KeyCode::Delete => {
-            app.kill_tunnel(app.tunnels_selected);
+            app.kill_selected_tunnel();
             true
         }
         KeyCode::Char('r') => {
-            app.restart_tunnel(app.tunnels_selected);
+            app.restart_selected_tunnel();
             true
         }
         KeyCode::Char('s') => {

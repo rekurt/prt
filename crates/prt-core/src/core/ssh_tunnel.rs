@@ -40,10 +40,20 @@ pub struct SshTunnelSpec {
     pub host_alias: String,
 }
 
+/// Resolved SSH connection settings used to expand a spec into concrete
+/// command-line flags. Lets `[[ssh_hosts]]` aliases that don't appear in
+/// `~/.ssh/config` actually resolve at the OS level.
+#[derive(Debug, Clone, Default)]
+pub struct ResolvedHost<'a> {
+    pub hostname: Option<&'a str>,
+    pub user: Option<&'a str>,
+    pub port: Option<u16>,
+    pub identity_file: Option<&'a str>,
+}
+
 impl SshTunnelSpec {
-    /// Build the argument list passed to `ssh`.
-    /// Always includes `-N` (no remote command).
-    pub fn ssh_args(&self) -> Vec<String> {
+    /// `-N -L LOCAL:host:PORT` / `-N -D LOCAL` — without the trailing host arg.
+    fn forward_args(&self) -> Vec<String> {
         match self.kind {
             TunnelKind::Local => {
                 let host = self.remote_host.as_deref().unwrap_or("localhost");
@@ -52,16 +62,43 @@ impl SshTunnelSpec {
                     "-N".into(),
                     "-L".into(),
                     format!("{}:{}:{}", self.local_port, host, port),
-                    self.host_alias.clone(),
                 ]
             }
-            TunnelKind::Dynamic => vec![
-                "-N".into(),
-                "-D".into(),
-                self.local_port.to_string(),
-                self.host_alias.clone(),
-            ],
+            TunnelKind::Dynamic => {
+                vec!["-N".into(), "-D".into(), self.local_port.to_string()]
+            }
         }
+    }
+
+    /// Build the argument list passed to `ssh`.
+    /// Always includes `-N` (no remote command). Uses only `host_alias`
+    /// — relies on `~/.ssh/config` (or DNS) to resolve it.
+    pub fn ssh_args(&self) -> Vec<String> {
+        let mut args = self.forward_args();
+        args.push(self.host_alias.clone());
+        args
+    }
+
+    /// Like [`ssh_args`] but injects `-l user`, `-p port`, `-i identity_file`
+    /// from a resolved host, and uses `hostname` (when provided) as the
+    /// positional target so prt-config-only aliases resolve correctly.
+    pub fn ssh_args_with(&self, host: &ResolvedHost<'_>) -> Vec<String> {
+        let mut args = self.forward_args();
+        if let Some(u) = host.user {
+            args.push("-l".into());
+            args.push(u.into());
+        }
+        if let Some(p) = host.port {
+            args.push("-p".into());
+            args.push(p.to_string());
+        }
+        if let Some(id) = host.identity_file {
+            args.push("-i".into());
+            args.push(id.into());
+        }
+        let target = host.hostname.unwrap_or(self.host_alias.as_str());
+        args.push(target.into());
+        args
     }
 
     /// Human-readable one-line summary.
@@ -202,6 +239,47 @@ mod tests {
     #[test]
     fn validate_dynamic_ok_with_no_remote() {
         assert!(dynamic_spec().validate().is_ok());
+    }
+
+    #[test]
+    fn ssh_args_with_resolved_host_local() {
+        let spec = local_spec();
+        let host = ResolvedHost {
+            hostname: Some("real.example.com"),
+            user: Some("deploy"),
+            port: Some(2222),
+            identity_file: Some("/home/u/.ssh/id"),
+        };
+        let args = spec.ssh_args_with(&host);
+        assert_eq!(
+            args,
+            vec![
+                "-N",
+                "-L",
+                "5433:127.0.0.1:5432",
+                "-l",
+                "deploy",
+                "-p",
+                "2222",
+                "-i",
+                "/home/u/.ssh/id",
+                "real.example.com",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn ssh_args_with_empty_host_falls_back_to_alias() {
+        let spec = local_spec();
+        let host = ResolvedHost::default();
+        let args = spec.ssh_args_with(&host);
+        // No -l/-p/-i and the alias is the positional target.
+        assert_eq!(args.last().map(String::as_str), Some("prod"));
+        assert!(!args.contains(&"-l".to_string()));
+        assert!(!args.contains(&"-p".to_string()));
     }
 
     #[test]

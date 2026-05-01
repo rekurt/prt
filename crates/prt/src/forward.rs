@@ -3,24 +3,42 @@
 //! Spawns and supervises `ssh -N -L`/`-D` tunnels from within the TUI.
 //! Tunnels are killed on `Drop` to prevent orphaned `ssh` processes.
 
-use prt_core::core::ssh_tunnel::{SshTunnelSpec, TunnelKind};
+use prt_core::core::ssh_config::SshHost;
+use prt_core::core::ssh_tunnel::{ResolvedHost, SshTunnelSpec, TunnelKind};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-/// A single SSH tunnel: a running `ssh` child process plus its spec.
+/// A single SSH tunnel: a running `ssh` child process plus the spec and
+/// resolved argument list (kept so `restart()` reuses the same resolution).
 pub struct SshTunnel {
     pub spec: SshTunnelSpec,
+    args: Vec<String>,
     child: Child,
 }
 
 impl SshTunnel {
-    /// Spawn an `ssh` process for `spec`. Validates startup by sleeping
-    /// briefly and reading stderr if `ssh` exits immediately.
+    /// Spawn an `ssh` process for `spec` with no extra host resolution
+    /// (relies on `~/.ssh/config` or DNS for the alias).
     pub fn spawn(spec: SshTunnelSpec) -> Result<Self, String> {
         spec.validate()?;
-        let child = spawn_ssh(&spec)?;
-        Ok(Self { spec, child })
+        let args = spec.ssh_args();
+        let child = spawn_ssh_args(&args)?;
+        Ok(Self { spec, args, child })
+    }
+
+    /// Spawn an `ssh` process for `spec`, injecting explicit
+    /// `-l/-p/-i hostname` flags from `host` if provided. Use this when
+    /// the alias is defined only in prt's `[[ssh_hosts]]` and would
+    /// otherwise fail to resolve.
+    pub fn spawn_with_host(spec: SshTunnelSpec, host: Option<&SshHost>) -> Result<Self, String> {
+        spec.validate()?;
+        let args = match host {
+            Some(h) => spec.ssh_args_with(&resolved_from(h)),
+            None => spec.ssh_args(),
+        };
+        let child = spawn_ssh_args(&args)?;
+        Ok(Self { spec, args, child })
     }
 
     /// Backwards-compat shortcut: spawn a Local tunnel matching the legacy
@@ -53,11 +71,10 @@ impl SshTunnel {
         let _ = self.child.wait();
     }
 
-    /// Kill and respawn from the current spec.
+    /// Kill and respawn using the previously resolved arg list.
     pub fn restart(&mut self) -> Result<(), String> {
         self.kill();
-        let new_child = spawn_ssh(&self.spec)?;
-        self.child = new_child;
+        self.child = spawn_ssh_args(&self.args)?;
         Ok(())
     }
 }
@@ -68,10 +85,18 @@ impl Drop for SshTunnel {
     }
 }
 
-fn spawn_ssh(spec: &SshTunnelSpec) -> Result<Child, String> {
-    let args = spec.ssh_args();
+fn resolved_from(h: &SshHost) -> ResolvedHost<'_> {
+    ResolvedHost {
+        hostname: h.hostname.as_deref(),
+        user: h.user.as_deref(),
+        port: h.port,
+        identity_file: h.identity_file.as_deref().and_then(|p| p.to_str()),
+    }
+}
+
+fn spawn_ssh_args(args: &[String]) -> Result<Child, String> {
     let mut child = Command::new("ssh")
-        .args(&args)
+        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -127,9 +152,14 @@ impl ForwardManager {
         Ok(self.tunnels.len() - 1)
     }
 
-    /// Add a tunnel from a full spec.
-    pub fn add_spec(&mut self, spec: SshTunnelSpec) -> Result<usize, String> {
-        let tunnel = SshTunnel::spawn(spec)?;
+    /// Add a tunnel from a spec, optionally resolving extra connection
+    /// settings (`hostname`, `user`, `port`, `identity_file`) from a known host.
+    pub fn add_spec_with_host(
+        &mut self,
+        spec: SshTunnelSpec,
+        host: Option<&SshHost>,
+    ) -> Result<usize, String> {
+        let tunnel = SshTunnel::spawn_with_host(spec, host)?;
         self.tunnels.push(tunnel);
         Ok(self.tunnels.len() - 1)
     }
