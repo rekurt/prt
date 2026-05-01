@@ -39,37 +39,30 @@ pub static STRINGS: Strings = Strings {
     conn_cmdline: "  Cmdline:    ",
 
     help_text: r#"
-  Keys:
-  q            quit
+  Global:
   ?            this help
-  /            search / filter (! = suspicious only)
-  Esc          back to table / clear filter
+  q            quit
+  Tab / Sh+Tab next / previous section (Connections | Processes | SSH)
+  Space        action menu (Kill / Copy / Block / Trace / Forward)
+  /            search / filter   (Esc twice to clear)
   r            refresh
   s            enter sudo password
-
-  Navigation:
-  j/k Up/Down  move selection
-  g/G          jump to start / end
-
-  Bottom panel (Table mode):
-  Enter/d      show/hide details panel
-
-  Fullscreen views:
-  5            Topology (process -> port -> remote)
-  6            Process detail (info, files, env)
-
-  Actions:
-  K/Del        kill process
-  c            copy line to clipboard
-  p            copy PID to clipboard
-  b            block remote IP (firewall)
-  t            attach/detach strace
-  F            SSH port forward (tunnel)
-
-  Table:
-  Tab          next sort column
-  Shift+Tab    reverse sort direction
   L            switch language
+  K / Del      kill selected process
+  c            copy selected line to clipboard
+  j/k g/G      navigate / jump to start | end
+
+  Connections (default section):
+  Enter / d    show / hide bottom Details panel
+  o / O        next sort column / reverse direction
+
+  Processes:
+  [ / ]        switch sub-tab (Detail | Topology)
+
+  SSH:
+  [ / ]        switch sub-tab (Hosts | Tunnels)
+  Hosts        Enter = new tunnel from this host,  r = reload
+  Tunnels      n = new,  e = edit,  K = kill,  r = restart,  s = save
 "#,
 
     kill_cancel: "[y] SIGTERM  [f] SIGKILL  [n/Esc] cancel",
