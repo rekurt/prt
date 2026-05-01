@@ -24,6 +24,8 @@ pub struct TunnelFormState {
     pub remote_port: String,
     pub host_alias: String,
     pub focused: TunnelFormField,
+    /// When set, submit replaces the tunnel at this index instead of creating a new one.
+    pub editing_idx: Option<usize>,
 }
 
 impl TunnelFormState {
@@ -35,7 +37,84 @@ impl TunnelFormState {
             remote_port: String::new(),
             host_alias: prefill_alias.unwrap_or_default(),
             focused: TunnelFormField::Kind,
+            editing_idx: None,
         }
+    }
+
+    /// Open the form in edit-mode for an existing tunnel.
+    pub fn edit(spec: &SshTunnelSpec, idx: usize) -> Self {
+        Self {
+            kind: spec.kind,
+            local_port: spec.local_port.to_string(),
+            remote_host: spec
+                .remote_host
+                .clone()
+                .unwrap_or_else(|| "127.0.0.1".into()),
+            remote_port: spec
+                .remote_port
+                .map(|p| p.to_string())
+                .unwrap_or_default(),
+            host_alias: spec.host_alias.clone(),
+            focused: TunnelFormField::LocalPort,
+            editing_idx: Some(idx),
+        }
+    }
+
+    /// Returns Some(error) if the field as currently typed is invalid.
+    /// Used for inline (per-field) validation feedback.
+    pub fn validate_field(&self, field: TunnelFormField) -> Option<&'static str> {
+        let s = i18n::strings();
+        match field {
+            TunnelFormField::Kind => None,
+            TunnelFormField::LocalPort => {
+                if self.local_port.trim().is_empty() {
+                    return Some(s.tunnel_form_field_required);
+                }
+                self.local_port
+                    .trim()
+                    .parse::<u16>()
+                    .err()
+                    .map(|_| "1..=65535")
+            }
+            TunnelFormField::RemoteHost => {
+                if self.kind == TunnelKind::Dynamic {
+                    return None;
+                }
+                if self.remote_host.trim().is_empty() {
+                    Some(s.tunnel_form_field_required)
+                } else {
+                    None
+                }
+            }
+            TunnelFormField::RemotePort => {
+                if self.kind == TunnelKind::Dynamic {
+                    return None;
+                }
+                if self.remote_port.trim().is_empty() {
+                    return Some(s.tunnel_form_field_required);
+                }
+                self.remote_port
+                    .trim()
+                    .parse::<u16>()
+                    .err()
+                    .map(|_| "1..=65535")
+            }
+            TunnelFormField::HostAlias => {
+                if self.host_alias.trim().is_empty() {
+                    Some(s.tunnel_form_field_required)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// Has the user entered any data that would be lost on Esc?
+    pub fn is_dirty(&self) -> bool {
+        !self.local_port.is_empty()
+            || !self.remote_port.is_empty()
+            || !self.host_alias.is_empty()
+            || self.remote_host != "127.0.0.1"
     }
 
     pub fn next_field(&mut self) {
@@ -145,10 +224,15 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     f.render_widget(Clear, popup_area);
 
+    let title = if form.editing_idx.is_some() {
+        s.tunnel_form_edit_title
+    } else {
+        s.tunnel_form_title
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(s.tunnel_form_title);
+        .title(title);
     let inner = block.inner(popup_area);
     f.render_widget(block, popup_area);
 
@@ -163,12 +247,14 @@ pub fn draw(f: &mut Frame, app: &App) {
         &format!("\u{25c0} {kind_value} \u{25b6}"),
         form.focused == TunnelFormField::Kind,
         false,
+        None,
     ));
     lines.push(field_line(
         s.tunnel_form_local_port,
         &form.local_port,
         form.focused == TunnelFormField::LocalPort,
         true,
+        form.validate_field(TunnelFormField::LocalPort),
     ));
 
     let dim_remote = form.kind == TunnelKind::Dynamic;
@@ -178,6 +264,11 @@ pub fn draw(f: &mut Frame, app: &App) {
         form.focused == TunnelFormField::RemoteHost,
         true,
         dim_remote,
+        if dim_remote {
+            None
+        } else {
+            form.validate_field(TunnelFormField::RemoteHost)
+        },
     ));
     lines.push(field_line_dim(
         s.tunnel_form_remote_port,
@@ -185,12 +276,18 @@ pub fn draw(f: &mut Frame, app: &App) {
         form.focused == TunnelFormField::RemotePort,
         true,
         dim_remote,
+        if dim_remote {
+            None
+        } else {
+            form.validate_field(TunnelFormField::RemotePort)
+        },
     ));
     lines.push(field_line(
         s.tunnel_form_host_alias,
         &form.host_alias,
         form.focused == TunnelFormField::HostAlias,
         true,
+        form.validate_field(TunnelFormField::HostAlias),
     ));
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
@@ -201,8 +298,14 @@ pub fn draw(f: &mut Frame, app: &App) {
     f.render_widget(Paragraph::new(lines), inner);
 }
 
-fn field_line(label: &'static str, value: &str, focused: bool, cursor: bool) -> Line<'static> {
-    field_line_dim(label, value, focused, cursor, false)
+fn field_line(
+    label: &'static str,
+    value: &str,
+    focused: bool,
+    cursor: bool,
+    error: Option<&str>,
+) -> Line<'static> {
+    field_line_dim(label, value, focused, cursor, false, error)
 }
 
 fn field_line_dim(
@@ -211,19 +314,25 @@ fn field_line_dim(
     focused: bool,
     cursor: bool,
     dim: bool,
+    error: Option<&str>,
 ) -> Line<'static> {
+    let has_error = error.is_some();
     let label_style = if dim {
         Style::default().fg(Color::DarkGray)
+    } else if has_error {
+        Style::default().fg(Color::Red)
     } else {
         Style::default().fg(Color::Cyan)
     };
     let value_style = if focused {
         Style::default()
             .fg(Color::Black)
-            .bg(Color::Cyan)
+            .bg(if has_error { Color::Red } else { Color::Cyan })
             .add_modifier(Modifier::BOLD)
     } else if dim {
         Style::default().fg(Color::DarkGray)
+    } else if has_error {
+        Style::default().fg(Color::Red)
     } else {
         Style::default()
     };
@@ -237,6 +346,13 @@ fn field_line_dim(
             Style::default().fg(Color::White),
         ));
     }
+    if let Some(err) = error {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            format!("\u{2717} {err}"),
+            Style::default().fg(Color::Red),
+        ));
+    }
     Line::from(spans)
 }
 
@@ -248,16 +364,36 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
     };
     match key.code {
         KeyCode::Esc => {
-            app.tunnel_form = None;
+            // If the form has unsaved input, require a second Esc within the
+            // arm window before discarding (mirrors the filter cascade).
+            if form.is_dirty() {
+                let armed = app
+                    .last_esc
+                    .map(|t| t.elapsed() < std::time::Duration::from_millis(1500))
+                    .unwrap_or(false);
+                if armed {
+                    app.tunnel_form = None;
+                    app.last_esc = None;
+                } else {
+                    app.last_esc = Some(std::time::Instant::now());
+                    let s = i18n::strings();
+                    app.set_status(s.esc_again_to_discard_form.into());
+                }
+            } else {
+                app.tunnel_form = None;
+            }
             true
         }
         KeyCode::Enter => {
-            // Build spec then drop the borrow on app.tunnel_form before mutating.
+            let editing_idx = form.editing_idx;
             let result = form.build_spec();
             match result {
                 Ok(spec) => {
                     app.tunnel_form = None;
-                    app.create_tunnel(spec);
+                    match editing_idx {
+                        Some(idx) => app.replace_tunnel(idx, spec),
+                        None => app.create_tunnel(spec),
+                    }
                 }
                 Err(e) => {
                     app.set_status(format!("{}: {e}", i18n::strings().tunnel_form_invalid));
@@ -358,6 +494,46 @@ mod tests {
         f.focused = TunnelFormField::LocalPort;
         f.next_field();
         assert_eq!(f.focused, TunnelFormField::HostAlias);
+    }
+
+    #[test]
+    fn edit_constructor_fills_all_fields() {
+        let spec = SshTunnelSpec {
+            name: None,
+            kind: TunnelKind::Local,
+            local_port: 5433,
+            remote_host: Some("db.internal".into()),
+            remote_port: Some(5432),
+            host_alias: "prod".into(),
+        };
+        let f = TunnelFormState::edit(&spec, 7);
+        assert_eq!(f.local_port, "5433");
+        assert_eq!(f.remote_host, "db.internal");
+        assert_eq!(f.remote_port, "5432");
+        assert_eq!(f.host_alias, "prod");
+        assert_eq!(f.editing_idx, Some(7));
+    }
+
+    #[test]
+    fn validate_field_returns_error_for_empty_required() {
+        let f = TunnelFormState::new(None);
+        assert!(f.validate_field(TunnelFormField::LocalPort).is_some());
+        assert!(f.validate_field(TunnelFormField::HostAlias).is_some());
+    }
+
+    #[test]
+    fn validate_field_rejects_non_numeric_port() {
+        let mut f = TunnelFormState::new(Some("p".into()));
+        f.local_port = "abc".into();
+        assert!(f.validate_field(TunnelFormField::LocalPort).is_some());
+    }
+
+    #[test]
+    fn is_dirty_after_typing() {
+        let mut f = TunnelFormState::new(None);
+        assert!(!f.is_dirty());
+        f.local_port = "1".into();
+        assert!(f.is_dirty());
     }
 
     #[test]

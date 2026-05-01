@@ -173,6 +173,25 @@ impl App {
         self.tunnel_form = Some(TunnelFormState::new(prefill_alias));
     }
 
+    /// Open the tunnel form pre-populated from an existing tunnel for editing.
+    /// On submit, the form will replace the tunnel at `idx` (kill + spawn).
+    pub fn open_tunnel_form_edit(&mut self, idx: usize) {
+        if let Some(tunnel) = self.forwards.tunnels.get(idx) {
+            self.tunnel_form = Some(TunnelFormState::edit(&tunnel.spec, idx));
+        }
+    }
+
+    /// Replace the tunnel at `idx` with a new spec (kill old, spawn new).
+    pub fn replace_tunnel(&mut self, idx: usize, spec: SshTunnelSpec) {
+        let summary = spec.summary();
+        let host = self.host_for_alias(&spec.host_alias).cloned();
+        let s = i18n::strings();
+        match self.forwards.replace_at(idx, spec, host.as_ref()) {
+            Ok(()) => self.set_status(format!("tunnel: {summary}")),
+            Err(e) => self.set_status(format!("{}: {e}", s.tunnel_create_failed)),
+        }
+    }
+
     /// Spawn a tunnel from a fully-validated spec.
     pub fn create_tunnel(&mut self, spec: SshTunnelSpec) {
         let summary = spec.summary();
@@ -232,6 +251,7 @@ impl App {
     }
 
     /// Persist the current set of active tunnels to the user's config file.
+    /// Failed tunnels are pruned first so the on-disk config stays clean.
     pub fn save_tunnels(&mut self) {
         let path = match config::config_path() {
             Some(p) => p,
@@ -240,6 +260,7 @@ impl App {
                 return;
             }
         };
+        self.forwards.drop_failed();
         let specs = self.forwards.specs();
         let s = i18n::strings();
         match config::write_tunnels(&path, &specs) {
