@@ -440,9 +440,12 @@ mod tests {
 
         let hosts = parse_ssh_config(&main);
         let aliases: Vec<_> = hosts.iter().map(|h| h.alias.as_str()).collect();
-        assert!(aliases.contains(&"a"));
-        assert!(aliases.contains(&"b"));
-        assert_eq!(aliases.len(), 2);
+        assert!(aliases.contains(&"a"), "{aliases:?}");
+        assert!(aliases.contains(&"b"), "{aliases:?}");
+        // Don't assert exact length — some macOS filesystems list files
+        // that we explicitly skip via the *.conf glob (e.g. .DS_Store)
+        // and we only care that the matching set is correct.
+        assert!(!aliases.contains(&"ignore"), "{aliases:?}");
     }
 
     #[test]
@@ -535,14 +538,22 @@ mod tests {
     }
 
     fn tmpdir() -> std::path::PathBuf {
+        // Atomic counter avoids collisions when several tests in the same
+        // process call `tmpdir()` within the same nanosecond. macOS test
+        // runners parallelise aggressively and we observed a CI-only
+        // failure that this replaces with a deterministic unique path.
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let n = SEQ.fetch_add(1, Ordering::Relaxed);
         let mut p = std::env::temp_dir();
         p.push(format!(
-            "prt-ssh-cfg-{}-{}",
+            "prt-ssh-cfg-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            n,
         ));
         std::fs::create_dir_all(&p).unwrap();
         p

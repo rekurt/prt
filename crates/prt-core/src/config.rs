@@ -513,14 +513,18 @@ alias = "z"
     }
 
     fn tempdir() -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let n = SEQ.fetch_add(1, Ordering::Relaxed);
         let mut p = std::env::temp_dir();
         p.push(format!(
-            "prt-test-{}-{}",
+            "prt-test-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            n,
         ));
         std::fs::create_dir_all(&p).unwrap();
         p
