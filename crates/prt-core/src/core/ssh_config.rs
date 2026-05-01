@@ -60,17 +60,27 @@ pub fn default_ssh_config_path() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".ssh").join("config"))
 }
 
-/// Parse `~/.ssh/config` (or any file with that grammar). On failure, returns
-/// an empty list — this is best-effort enrichment.
+/// Parse `~/.ssh/config` (or any file with that grammar). Resolves
+/// `Include` directives relative to the config file's parent directory,
+/// matching OpenSSH semantics (capped at a small recursion depth so
+/// circular includes don't loop forever). On failure, returns an empty
+/// list — this is best-effort enrichment.
 pub fn parse_ssh_config(path: &Path) -> Vec<SshHost> {
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };
-    parse_ssh_config_str(&content)
+    parse_ssh_config_with_base(&content, path.parent(), 0)
 }
 
+#[cfg(test)]
 fn parse_ssh_config_str(content: &str) -> Vec<SshHost> {
+    parse_ssh_config_with_base(content, None, 0)
+}
+
+const MAX_INCLUDE_DEPTH: u32 = 16;
+
+fn parse_ssh_config_with_base(content: &str, base_dir: Option<&Path>, depth: u32) -> Vec<SshHost> {
     let mut result: Vec<SshHost> = Vec::new();
     let mut current: Vec<usize> = Vec::new(); // indices into result for active aliases
 
@@ -86,11 +96,38 @@ fn parse_ssh_config_str(content: &str) -> Vec<SshHost> {
         };
         let key_lc = key.to_ascii_lowercase();
 
+        if key_lc == "include" {
+            if depth >= MAX_INCLUDE_DEPTH {
+                continue;
+            }
+            for token in value.split_whitespace() {
+                let raw = strip_quotes(token);
+                for include_path in resolve_include(raw, base_dir) {
+                    if let Ok(included) = fs::read_to_string(&include_path) {
+                        let nested =
+                            parse_ssh_config_with_base(&included, include_path.parent(), depth + 1);
+                        for host in nested {
+                            result.push(host);
+                        }
+                    }
+                }
+            }
+            // Includes terminate the current host context per OpenSSH
+            // — directives after Include apply at top level until the
+            // next `Host` block.
+            current.clear();
+            continue;
+        }
+
         if key_lc == "host" {
             current.clear();
             for token in value.split_whitespace() {
                 let alias = strip_quotes(token);
-                if alias.is_empty() || alias.contains('*') || alias.contains('?') {
+                if alias.is_empty()
+                    || alias.starts_with('!')
+                    || alias.contains('*')
+                    || alias.contains('?')
+                {
                     continue;
                 }
                 result.push(SshHost {
@@ -127,6 +164,102 @@ fn parse_ssh_config_str(content: &str) -> Vec<SshHost> {
     }
 
     result
+}
+
+/// Resolve one `Include` token into a list of concrete file paths.
+///
+/// - `~/...` is expanded via `dirs::home_dir`.
+/// - Relative paths are resolved against `base_dir` (typically the parent
+///   of the config file currently being parsed), matching OpenSSH semantics.
+/// - If the final path contains a single `*` or `?` glob in its basename,
+///   the parent directory is listed and entries matching the basename
+///   pattern are returned. Globs in directory components are not supported
+///   (rare in real configs).
+fn resolve_include(raw: &str, base_dir: Option<&Path>) -> Vec<PathBuf> {
+    if raw.is_empty() {
+        return Vec::new();
+    }
+    let expanded = if let Some(rest) = raw.strip_prefix("~/") {
+        match dirs::home_dir() {
+            Some(h) => h.join(rest),
+            None => return Vec::new(),
+        }
+    } else {
+        let p = PathBuf::from(raw);
+        if p.is_absolute() {
+            p
+        } else {
+            match base_dir {
+                Some(b) => b.join(p),
+                None => p,
+            }
+        }
+    };
+
+    let basename = match expanded.file_name().and_then(|s| s.to_str()) {
+        Some(s) => s.to_string(),
+        None => return Vec::new(),
+    };
+
+    if !basename.contains('*') && !basename.contains('?') {
+        return vec![expanded];
+    }
+
+    let parent = match expanded.parent() {
+        Some(p) => p,
+        None => return Vec::new(),
+    };
+    let read = match fs::read_dir(parent) {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for entry in read.flatten() {
+        let name = entry.file_name();
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => continue,
+        };
+        if match_glob(&basename, name_str) {
+            out.push(entry.path());
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Minimal fnmatch-style matcher: `*` matches any sequence (including empty),
+/// `?` matches exactly one character. No bracket classes, no escaping.
+fn match_glob(pattern: &str, name: &str) -> bool {
+    let p: Vec<char> = pattern.chars().collect();
+    let n: Vec<char> = name.chars().collect();
+    fn rec(p: &[char], n: &[char]) -> bool {
+        match p.first() {
+            None => n.is_empty(),
+            Some('*') => {
+                if rec(&p[1..], n) {
+                    return true;
+                }
+                if let Some((_, rest)) = n.split_first() {
+                    rec(p, rest)
+                } else {
+                    false
+                }
+            }
+            Some('?') => {
+                if let Some((_, rest)) = n.split_first() {
+                    rec(&p[1..], rest)
+                } else {
+                    false
+                }
+            }
+            Some(c) => match n.split_first() {
+                Some((nc, rest)) if nc == c => rec(&p[1..], rest),
+                _ => false,
+            },
+        }
+    }
+    rec(&p, &n)
 }
 
 fn split_kv(line: &str) -> Option<(&str, &str)> {
@@ -245,6 +378,79 @@ mod tests {
         let hosts = parse_ssh_config_str(cfg);
         assert_eq!(hosts.len(), 1);
         assert_eq!(hosts[0].alias, "prod");
+    }
+
+    #[test]
+    fn parse_skips_negated_aliases() {
+        let cfg = "Host !bastion good\n  HostName ok\n";
+        let hosts = parse_ssh_config_str(cfg);
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].alias, "good");
+    }
+
+    #[test]
+    fn parse_resolves_include_directive() {
+        // Build a small fixture: parent file with an `Include` pointing at
+        // a sibling fragment.
+        let dir = tmpdir();
+        let frag = dir.join("frag.conf");
+        std::fs::write(&frag, "Host included-alias\n  HostName included.example\n").unwrap();
+        let main = dir.join("config");
+        std::fs::write(
+            &main,
+            format!("Host top\n  HostName t\nInclude {}\n", frag.display()),
+        )
+        .unwrap();
+
+        let hosts = parse_ssh_config(&main);
+        let aliases: Vec<_> = hosts.iter().map(|h| h.alias.as_str()).collect();
+        assert!(aliases.contains(&"top"), "{aliases:?}");
+        assert!(aliases.contains(&"included-alias"), "{aliases:?}");
+    }
+
+    #[test]
+    fn parse_include_with_glob_pattern() {
+        let dir = tmpdir();
+        let sub = dir.join("conf.d");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("a.conf"), "Host a\n  HostName ah\n").unwrap();
+        std::fs::write(sub.join("b.conf"), "Host b\n  HostName bh\n").unwrap();
+        std::fs::write(sub.join("ignore.txt"), "garbage\n").unwrap();
+
+        let main = dir.join("config");
+        std::fs::write(&main, format!("Include {}/*.conf\n", sub.display())).unwrap();
+
+        let hosts = parse_ssh_config(&main);
+        let aliases: Vec<_> = hosts.iter().map(|h| h.alias.as_str()).collect();
+        assert!(aliases.contains(&"a"));
+        assert!(aliases.contains(&"b"));
+        assert_eq!(aliases.len(), 2);
+    }
+
+    #[test]
+    fn match_glob_basics() {
+        assert!(match_glob("*.conf", "a.conf"));
+        assert!(match_glob("*.conf", ".conf"));
+        assert!(!match_glob("*.conf", "a.txt"));
+        assert!(match_glob("?.conf", "a.conf"));
+        assert!(!match_glob("?.conf", "ab.conf"));
+        assert!(match_glob("a*b", "axyzb"));
+        assert!(match_glob("a*", "abc"));
+        assert!(match_glob("*", "anything"));
+    }
+
+    fn tmpdir() -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "prt-ssh-cfg-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&p).unwrap();
+        p
     }
 
     #[test]
