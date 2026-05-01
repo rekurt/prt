@@ -561,7 +561,7 @@ fn draw_chart_fullscreen(f: &mut Frame, app: &App, area: Rect) {
             }
         }
         let mut v: Vec<_> = map.into_iter().collect();
-        v.sort_by(|a, b| b.1.cmp(&a.1));
+        v.sort_by_key(|b| std::cmp::Reverse(b.1));
         v
     };
     let max = counts.first().map(|c| c.1).unwrap_or(1).max(1);
