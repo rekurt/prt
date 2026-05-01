@@ -26,13 +26,14 @@ cargo install prt
 | **Connection aging** | Color-coded by age (>1h yellow, >24h red, CLOSE_WAIT always red) |
 | **Suspicious detector** | `[!]` flags for non-root on privileged ports, scripts on sensitive ports |
 | **Process tree** | Full parent chain (e.g. `launchd → nginx → worker`) |
-| **Detail panel** | Tree / Network / Connection tabs (`1` `2` `3`) |
-| **Fullscreen views** | Topology (`5`), Process detail (`6`) |
-| **Search & filter** | By port, service, process, PID, protocol, state, user. `!` = suspicious |
-| **Kill** | Select → `K` → `y` (SIGTERM) or `f` (SIGKILL) |
-| **Firewall block** | `b` → block remote IP with undo command |
-| **Strace** | `t` → live syscall tracing in split panel |
-| **SSH Forward** | `F` → SSH -L tunnel from selected port |
+| **Sections** | `Tab` cycles Connections / Processes / SSH; sub-tabs with `[` / `]` |
+| **Details panel** | Single unified panel under the table — bind, iface, remote, state, cmdline, related ports, process tree |
+| **Action menu** | `Space` → contextual list (Kill / Copy / Block / Trace / Forward) |
+| **Search & filter** | By port, service, process, PID, protocol, state, user. `!` = suspicious. `Esc` twice to clear |
+| **Kill** | `K` → `y` (SIGTERM) or `f` (SIGKILL) |
+| **Firewall block** | `Space → Block IP` — adds rule + status-bar undo command |
+| **Strace** | `Space → Trace` — live syscall stream in split panel |
+| **SSH Forward** | `Space → SSH forward` — opens tunnel form with inline validation |
 | **Containers** | Docker/Podman container name column (auto-hides) |
 | **Bandwidth** | System-wide RX/TX in header |
 | **Export** | `--export json/csv`, `--json` (NDJSON stream) |
@@ -54,13 +55,13 @@ sudo prt                # run as root
 
 ## Keyboard shortcuts
 
-**Navigation:** `j`/`k` move, `g`/`G` top/bottom, `/` search, `Esc` back/clear, `q` quit
+**Global:** `?` help, `q` quit, `Tab`/`Shift+Tab` next/prev section, `Space` action menu, `/` filter, `r` refresh, `s` sudo, `L` language
 
-**Panel:** `Enter`/`d` toggle details, `1`-`3` tabs, `←`/`→` switch tabs
+**Direct:** `K`/`Del` kill, `c` copy line
 
-**Views:** `5` topology, `6` process detail
+**Connections:** `Enter`/`d` toggle Details panel, `o`/`O` sort column / reverse
 
-**Actions:** `K` kill, `c` copy, `p` copy PID, `b` block IP, `t` strace, `F` forward, `Tab` sort, `L` language
+**Processes / SSH:** `[`/`]` switch sub-tab. SSH/Tunnels: `n` new · `e` edit · `K` kill · `r` restart · `s` save
 
 ## Architecture
 
