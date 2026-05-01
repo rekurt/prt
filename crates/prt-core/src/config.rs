@@ -211,7 +211,15 @@ pub fn write_tunnels(path: &Path, specs: &[SshTunnelSpec]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    // Only fall back to empty content when the file genuinely doesn't exist.
+    // Other I/O errors (permission denied, transient disk error, decoding)
+    // must propagate so we don't blow away unrelated sections like
+    // `known_ports` / `alerts` / `ssh_hosts`.
+    let existing = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
+    };
     let stripped = strip_ssh_tunnels_section(&existing);
 
     let configs: Vec<SshTunnelConfig> = specs.iter().map(SshTunnelConfig::from_spec).collect();
@@ -459,6 +467,26 @@ alias = "z"
         let raw: RawConfig = toml::from_str(&content).unwrap();
         let cfg: PrtConfig = raw.into();
         assert_eq!(cfg.ssh_tunnels.len(), 1);
+    }
+
+    #[test]
+    fn write_tunnels_propagates_read_errors() {
+        // A directory in place of the config file forces read_to_string to
+        // fail with a non-NotFound error (IsADirectory / Other on Linux).
+        let dir = tempdir();
+        let path = dir.join("not-a-file");
+        std::fs::create_dir(&path).unwrap();
+
+        let specs = vec![SshTunnelSpec {
+            name: None,
+            kind: TunnelKind::Local,
+            local_port: 1,
+            remote_host: Some("h".into()),
+            remote_port: Some(2),
+            host_alias: "a".into(),
+        }];
+        let err = write_tunnels(&path, &specs).expect_err("should not silently overwrite");
+        assert_ne!(err.kind(), io::ErrorKind::NotFound);
     }
 
     #[test]

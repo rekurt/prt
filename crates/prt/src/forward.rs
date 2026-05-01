@@ -3,7 +3,7 @@
 //! Spawns and supervises `ssh -N -L`/`-D` tunnels from within the TUI.
 //! Tunnels are killed on `Drop` to prevent orphaned `ssh` processes.
 
-use prt_core::core::ssh_config::SshHost;
+use prt_core::core::ssh_config::{SshHost, SshHostSource};
 use prt_core::core::ssh_tunnel::{ResolvedHost, SshTunnelSpec, TunnelKind};
 use std::process::{Child, Command, Stdio};
 use std::thread;
@@ -27,15 +27,19 @@ impl SshTunnel {
         Ok(Self { spec, args, child })
     }
 
-    /// Spawn an `ssh` process for `spec`, injecting explicit
-    /// `-l/-p/-i hostname` flags from `host` if provided. Use this when
-    /// the alias is defined only in prt's `[[ssh_hosts]]` and would
-    /// otherwise fail to resolve.
+    /// Spawn an `ssh` process for `spec`. For aliases defined only in prt's
+    /// `[[ssh_hosts]]` (which `ssh` itself doesn't know about), inject
+    /// explicit `-l/-p/-i hostname` flags. For aliases parsed from
+    /// `~/.ssh/config`, keep the alias as the positional target so that
+    /// host-scoped directives (`ProxyJump`, `ProxyCommand`, `ForwardAgent`,
+    /// etc.) are honoured by `ssh`.
     pub fn spawn_with_host(spec: SshTunnelSpec, host: Option<&SshHost>) -> Result<Self, String> {
         spec.validate()?;
         let args = match host {
-            Some(h) => spec.ssh_args_with(&resolved_from(h)),
-            None => spec.ssh_args(),
+            Some(h) if h.source == SshHostSource::PrtConfig => {
+                spec.ssh_args_with(&resolved_from(h))
+            }
+            _ => spec.ssh_args(),
         };
         let child = spawn_ssh_args(&args)?;
         Ok(Self { spec, args, child })
