@@ -100,6 +100,19 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    if app.tunnel_form.is_some() && crate::views::tunnel_form::handle_key(app, key) {
+        return;
+    }
+
+    // Let SshHosts/Tunnels views consume their own navigation/action keys
+    // before generic handlers (so e.g. `s` in Tunnels means "save", not "sudo").
+    if app.view_mode == ViewMode::SshHosts && crate::views::ssh_hosts::handle_key(app, key) {
+        return;
+    }
+    if app.view_mode == ViewMode::Tunnels && crate::views::tunnels::handle_key(app, key) {
+        return;
+    }
+
     match key.code {
         KeyCode::Char('q') => app.should_quit = true,
         KeyCode::Char('?') => app.show_help = true,
@@ -205,6 +218,22 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 ViewMode::Table
             } else {
                 ViewMode::Namespaces
+            };
+        }
+        KeyCode::Char('8') => {
+            app.scroll_offset = 0;
+            app.view_mode = if app.view_mode == ViewMode::SshHosts {
+                ViewMode::Table
+            } else {
+                ViewMode::SshHosts
+            };
+        }
+        KeyCode::Char('9') => {
+            app.scroll_offset = 0;
+            app.view_mode = if app.view_mode == ViewMode::Tunnels {
+                ViewMode::Table
+            } else {
+                ViewMode::Tunnels
             };
         }
 

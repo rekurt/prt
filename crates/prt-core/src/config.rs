@@ -1,12 +1,16 @@
 //! Configuration loading from `~/.config/prt/config.toml`.
 //!
-//! The config is read-only — `prt` never writes to this file.
+//! The config is mostly read-only — `prt` only writes to it through
+//! [`write_tunnels`] when the user explicitly requests "save tunnels".
 //! Missing file or parse errors fall back to defaults silently
 //! (a warning is printed to stderr on parse failure).
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
+
+use crate::core::ssh_tunnel::{SshTunnelSpec, TunnelKind};
 
 /// Raw TOML representation (TOML table keys are always strings).
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -14,6 +18,8 @@ use std::path::PathBuf;
 struct RawConfig {
     known_ports: HashMap<String, String>,
     alerts: Vec<AlertRuleConfig>,
+    ssh_hosts: Vec<SshHostConfig>,
+    ssh_tunnels: Vec<SshTunnelConfig>,
 }
 
 /// Top-level configuration.
@@ -37,6 +43,12 @@ pub struct PrtConfig {
     /// action = "bell"
     /// ```
     pub alerts: Vec<AlertRuleConfig>,
+
+    /// Saved SSH hosts (in addition to `~/.ssh/config`).
+    pub ssh_hosts: Vec<SshHostConfig>,
+
+    /// Saved SSH tunnels (auto-restore on launch).
+    pub ssh_tunnels: Vec<SshTunnelConfig>,
 }
 
 impl From<RawConfig> for PrtConfig {
@@ -49,6 +61,8 @@ impl From<RawConfig> for PrtConfig {
         Self {
             known_ports,
             alerts: raw.alerts,
+            ssh_hosts: raw.ssh_hosts,
+            ssh_tunnels: raw.ssh_tunnels,
         }
     }
 }
@@ -67,6 +81,84 @@ pub struct AlertRuleConfig {
 
 fn default_action() -> String {
     "highlight".into()
+}
+
+/// User-defined SSH host (extends `~/.ssh/config`).
+///
+/// ```toml
+/// [[ssh_hosts]]
+/// alias = "prod-db"
+/// hostname = "10.0.1.5"
+/// user = "deploy"
+/// port = 22
+/// identity_file = "~/.ssh/id_ed25519_prod"
+/// ```
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SshHostConfig {
+    pub alias: String,
+    pub hostname: Option<String>,
+    pub user: Option<String>,
+    pub port: Option<u16>,
+    pub identity_file: Option<String>,
+}
+
+/// Saved SSH tunnel.
+///
+/// ```toml
+/// [[ssh_tunnels]]
+/// name = "prod-postgres"
+/// kind = "local"
+/// local_port = 5433
+/// remote_host = "127.0.0.1"
+/// remote_port = 5432
+/// host_alias = "prod-db"
+/// ```
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SshTunnelConfig {
+    pub name: Option<String>,
+    #[serde(default = "default_tunnel_kind")]
+    pub kind: String,
+    pub local_port: u16,
+    pub remote_host: Option<String>,
+    pub remote_port: Option<u16>,
+    pub host_alias: String,
+}
+
+fn default_tunnel_kind() -> String {
+    "local".into()
+}
+
+impl SshTunnelConfig {
+    /// Convert to runtime [`SshTunnelSpec`]. Returns `None` for unknown kinds
+    /// or invalid combinations (logged at the call site, not here).
+    pub fn to_spec(&self) -> Option<SshTunnelSpec> {
+        let kind = match self.kind.to_ascii_lowercase().as_str() {
+            "local" => TunnelKind::Local,
+            "dynamic" => TunnelKind::Dynamic,
+            _ => return None,
+        };
+        Some(SshTunnelSpec {
+            name: self.name.clone(),
+            kind,
+            local_port: self.local_port,
+            remote_host: self.remote_host.clone(),
+            remote_port: self.remote_port,
+            host_alias: self.host_alias.clone(),
+        })
+    }
+
+    pub fn from_spec(spec: &SshTunnelSpec) -> Self {
+        Self {
+            name: spec.name.clone(),
+            kind: spec.kind.label().into(),
+            local_port: spec.local_port,
+            remote_host: spec.remote_host.clone(),
+            remote_port: spec.remote_port,
+            host_alias: spec.host_alias.clone(),
+        }
+    }
 }
 
 /// Returns the config directory path: `~/.config/prt/`.
@@ -110,6 +202,71 @@ pub fn load_config() -> PrtConfig {
     }
 }
 
+/// Persist `[[ssh_tunnels]]` to the config file at `path`.
+///
+/// Reads any existing TOML, strips all existing `[[ssh_tunnels]]` blocks,
+/// and appends fresh ones rebuilt from `specs`. The rest of the file is
+/// preserved verbatim. Creates the file (and parent directory) if missing.
+pub fn write_tunnels(path: &Path, specs: &[SshTunnelSpec]) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let stripped = strip_ssh_tunnels_section(&existing);
+
+    let configs: Vec<SshTunnelConfig> = specs.iter().map(SshTunnelConfig::from_spec).collect();
+
+    #[derive(Serialize)]
+    struct Wrap<'a> {
+        ssh_tunnels: &'a [SshTunnelConfig],
+    }
+    let appended = if configs.is_empty() {
+        String::new()
+    } else {
+        toml::to_string(&Wrap {
+            ssh_tunnels: &configs,
+        })
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+    };
+
+    let mut out = stripped.trim_end().to_string();
+    if !out.is_empty() {
+        out.push('\n');
+        out.push('\n');
+    }
+    out.push_str(&appended);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    std::fs::write(path, out)
+}
+
+/// Remove every `[[ssh_tunnels]]` block (including its key/value lines)
+/// from a raw TOML string. A block runs until the next `[`-prefixed line
+/// or EOF. Comments belonging to the block are removed too.
+fn strip_ssh_tunnels_section(content: &str) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut skipping = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("[[ssh_tunnels]]") || trimmed.starts_with("[ssh_tunnels]") {
+            skipping = true;
+            continue;
+        }
+        if skipping {
+            // A new top-level table or array-of-tables ends the skipped block.
+            if trimmed.starts_with('[') {
+                skipping = false;
+            } else {
+                continue;
+            }
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,6 +276,8 @@ mod tests {
         let config = PrtConfig::default();
         assert!(config.known_ports.is_empty());
         assert!(config.alerts.is_empty());
+        assert!(config.ssh_hosts.is_empty());
+        assert!(config.ssh_tunnels.is_empty());
     }
 
     #[test]
@@ -160,6 +319,50 @@ connections_gt = 100
     }
 
     #[test]
+    fn parse_ssh_hosts() {
+        let toml_str = r#"
+[[ssh_hosts]]
+alias = "prod"
+hostname = "10.0.0.5"
+user = "deploy"
+port = 22
+identity_file = "~/.ssh/id_ed25519"
+"#;
+        let raw: RawConfig = toml::from_str(toml_str).unwrap();
+        let config: PrtConfig = raw.into();
+        assert_eq!(config.ssh_hosts.len(), 1);
+        assert_eq!(config.ssh_hosts[0].alias, "prod");
+        assert_eq!(config.ssh_hosts[0].hostname.as_deref(), Some("10.0.0.5"));
+        assert_eq!(config.ssh_hosts[0].port, Some(22));
+    }
+
+    #[test]
+    fn parse_ssh_tunnels() {
+        let toml_str = r#"
+[[ssh_tunnels]]
+name = "pg"
+kind = "local"
+local_port = 5433
+remote_host = "127.0.0.1"
+remote_port = 5432
+host_alias = "prod"
+
+[[ssh_tunnels]]
+kind = "dynamic"
+local_port = 1080
+host_alias = "prod"
+"#;
+        let raw: RawConfig = toml::from_str(toml_str).unwrap();
+        let config: PrtConfig = raw.into();
+        assert_eq!(config.ssh_tunnels.len(), 2);
+        let s0 = config.ssh_tunnels[0].to_spec().unwrap();
+        assert_eq!(s0.kind, TunnelKind::Local);
+        assert_eq!(s0.local_port, 5433);
+        let s1 = config.ssh_tunnels[1].to_spec().unwrap();
+        assert_eq!(s1.kind, TunnelKind::Dynamic);
+    }
+
+    #[test]
     fn parse_empty_toml_returns_defaults() {
         let raw: RawConfig = toml::from_str("").unwrap();
         let config: PrtConfig = raw.into();
@@ -185,5 +388,113 @@ not_a_port = "ignored"
         // In test environment, config_path() likely points to a nonexistent file
         let config = load_config();
         assert!(config.known_ports.is_empty());
+    }
+
+    #[test]
+    fn strip_ssh_tunnels_preserves_other_sections() {
+        let content = r#"
+[known_ports]
+9090 = "prom"
+
+[[alerts]]
+port = 22
+
+[[ssh_tunnels]]
+name = "old"
+kind = "local"
+local_port = 1
+remote_host = "x"
+remote_port = 1
+host_alias = "y"
+
+[[ssh_hosts]]
+alias = "z"
+"#;
+        let stripped = strip_ssh_tunnels_section(content);
+        assert!(stripped.contains("[known_ports]"));
+        assert!(stripped.contains("[[alerts]]"));
+        assert!(stripped.contains("[[ssh_hosts]]"));
+        assert!(!stripped.contains("[[ssh_tunnels]]"));
+        assert!(!stripped.contains("\"old\""));
+    }
+
+    #[test]
+    fn write_tunnels_roundtrip() {
+        let dir = tempdir();
+        let path = dir.join("config.toml");
+
+        let specs = vec![
+            SshTunnelSpec {
+                name: Some("pg".into()),
+                kind: TunnelKind::Local,
+                local_port: 5433,
+                remote_host: Some("127.0.0.1".into()),
+                remote_port: Some(5432),
+                host_alias: "prod".into(),
+            },
+            SshTunnelSpec {
+                name: None,
+                kind: TunnelKind::Dynamic,
+                local_port: 1080,
+                remote_host: None,
+                remote_port: None,
+                host_alias: "prod".into(),
+            },
+        ];
+        write_tunnels(&path, &specs).unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        let raw: RawConfig = toml::from_str(&content).unwrap();
+        let cfg: PrtConfig = raw.into();
+        assert_eq!(cfg.ssh_tunnels.len(), 2);
+        let s0 = cfg.ssh_tunnels[0].to_spec().unwrap();
+        assert_eq!(s0.local_port, 5433);
+        assert_eq!(s0.kind, TunnelKind::Local);
+        let s1 = cfg.ssh_tunnels[1].to_spec().unwrap();
+        assert_eq!(s1.kind, TunnelKind::Dynamic);
+
+        // Re-write replaces, doesn't duplicate.
+        write_tunnels(&path, &specs[..1]).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        let raw: RawConfig = toml::from_str(&content).unwrap();
+        let cfg: PrtConfig = raw.into();
+        assert_eq!(cfg.ssh_tunnels.len(), 1);
+    }
+
+    #[test]
+    fn write_tunnels_preserves_other_sections() {
+        let dir = tempdir();
+        let path = dir.join("config.toml");
+        let initial = "[known_ports]\n9090 = \"prom\"\n\n[[alerts]]\nport = 22\n";
+        std::fs::write(&path, initial).unwrap();
+
+        let specs = vec![SshTunnelSpec {
+            name: None,
+            kind: TunnelKind::Local,
+            local_port: 1,
+            remote_host: Some("h".into()),
+            remote_port: Some(2),
+            host_alias: "a".into(),
+        }];
+        write_tunnels(&path, &specs).unwrap();
+
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("[known_ports]"));
+        assert!(content.contains("[[alerts]]"));
+        assert!(content.contains("[[ssh_tunnels]]"));
+    }
+
+    fn tempdir() -> PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "prt-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&p).unwrap();
+        p
     }
 }

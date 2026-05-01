@@ -204,6 +204,54 @@ pub struct Strings {
     pub forward_confirm_hint: &'static str,
     pub hint_forward: &'static str,
 
+    // SSH hosts / tunnels views
+    pub view_ssh_hosts: &'static str,
+    pub view_tunnels: &'static str,
+
+    // SSH host columns
+    pub ssh_col_alias: &'static str,
+    pub ssh_col_target: &'static str,
+    pub ssh_col_source: &'static str,
+    pub ssh_hosts_empty: &'static str,
+    pub ssh_hosts_reloaded: &'static str,
+
+    // Tunnels columns
+    pub tunnel_col_name: &'static str,
+    pub tunnel_col_kind: &'static str,
+    pub tunnel_col_local: &'static str,
+    pub tunnel_col_remote: &'static str,
+    pub tunnel_col_host: &'static str,
+    pub tunnel_col_status: &'static str,
+    pub tunnel_status_alive: &'static str,
+    pub tunnel_status_dead: &'static str,
+    pub tunnels_empty: &'static str,
+    pub tunnels_saved: &'static str,
+    pub tunnel_killed: &'static str,
+    pub tunnel_restarted: &'static str,
+    pub tunnel_create_failed: &'static str,
+    pub tunnel_kind_local: &'static str,
+    pub tunnel_kind_dynamic: &'static str,
+
+    // Tunnel form
+    pub tunnel_form_title: &'static str,
+    pub tunnel_form_kind: &'static str,
+    pub tunnel_form_local_port: &'static str,
+    pub tunnel_form_remote_host: &'static str,
+    pub tunnel_form_remote_port: &'static str,
+    pub tunnel_form_host_alias: &'static str,
+    pub tunnel_form_hint: &'static str,
+    pub tunnel_form_invalid: &'static str,
+
+    // Footer hints — ssh views
+    pub hint_ssh_hosts: &'static str,
+    pub hint_tunnels: &'static str,
+    pub hint_new_tunnel: &'static str,
+    pub hint_kill_tunnel: &'static str,
+    pub hint_restart_tunnel: &'static str,
+    pub hint_save_tunnels: &'static str,
+    pub hint_reload: &'static str,
+    pub hint_open_tunnel: &'static str,
+
     // Help overlay
     pub help_title: &'static str,
 }
