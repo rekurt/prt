@@ -366,8 +366,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
             if form.is_dirty() {
                 let armed = app
                     .last_esc
-                    .map(|t| t.elapsed() < std::time::Duration::from_millis(1500))
-                    .unwrap_or(false);
+                    .is_some_and(|t| t.elapsed() < std::time::Duration::from_millis(1500));
                 if armed {
                     app.tunnel_form = None;
                     app.last_esc = None;

@@ -178,23 +178,18 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('q') => app.should_quit = true,
         KeyCode::Char('?') => app.show_help = true,
         KeyCode::Char('/') => app.filter_mode = true,
-        KeyCode::Esc => {
-            // Cascade: only meaningful action remaining at top-level is clearing
-            // a non-empty filter. To prevent accidental loss, require two presses.
-            if !app.filter.is_empty() {
-                let armed = app
-                    .last_esc
-                    .map(|t| t.elapsed() < ESC_ARM_WINDOW)
-                    .unwrap_or(false);
-                if armed {
-                    app.filter.clear();
-                    app.update_filtered();
-                    app.last_esc = None;
-                } else {
-                    app.last_esc = Some(Instant::now());
-                    let s = i18n::strings();
-                    app.set_status(s.esc_again_to_clear_filter.into());
-                }
+        // Cascade: only meaningful Esc action at top-level is clearing a
+        // non-empty filter. To prevent accidental loss, require two presses.
+        KeyCode::Esc if !app.filter.is_empty() => {
+            let armed = app.last_esc.is_some_and(|t| t.elapsed() < ESC_ARM_WINDOW);
+            if armed {
+                app.filter.clear();
+                app.update_filtered();
+                app.last_esc = None;
+            } else {
+                app.last_esc = Some(Instant::now());
+                let s = i18n::strings();
+                app.set_status(s.esc_again_to_clear_filter.into());
             }
         }
         KeyCode::Char('r') => {
