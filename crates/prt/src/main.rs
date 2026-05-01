@@ -4,6 +4,7 @@ mod input;
 mod stream;
 mod tracer;
 mod ui;
+mod views;
 mod watch;
 
 use clap::Parser;

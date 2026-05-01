@@ -288,6 +288,10 @@ pub enum ViewMode {
     ProcessDetail,
     /// Fullscreen network namespace grouping (Linux only).
     Namespaces,
+    /// Fullscreen list of saved SSH hosts (from `~/.ssh/config` + prt config).
+    SshHosts,
+    /// Fullscreen SSH tunnels manager.
+    Tunnels,
 }
 
 /// Output format for CLI export mode (`--export`).

@@ -100,6 +100,19 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    if app.tunnel_form.is_some() && crate::views::tunnel_form::handle_key(app, key) {
+        return;
+    }
+
+    // Let SshHosts/Tunnels views consume their own navigation/action keys
+    // before generic handlers (so e.g. `s` in Tunnels means "save", not "sudo").
+    if app.view_mode == ViewMode::SshHosts && crate::views::ssh_hosts::handle_key(app, key) {
+        return;
+    }
+    if app.view_mode == ViewMode::Tunnels && crate::views::tunnels::handle_key(app, key) {
+        return;
+    }
+
     match key.code {
         KeyCode::Char('q') => app.should_quit = true,
         KeyCode::Char('?') => app.show_help = true,
@@ -119,10 +132,8 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             let s = i18n::strings();
             app.set_status(s.refreshed.into());
         }
-        KeyCode::Char('s') => {
-            if !app.session.is_root {
-                app.open_sudo_prompt(crate::app::SudoPurpose::Refresh);
-            }
+        KeyCode::Char('s') if !app.session.is_root => {
+            app.open_sudo_prompt(crate::app::SudoPurpose::Refresh);
         }
 
         // Navigation (works in all view modes)
@@ -148,30 +159,22 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
 
         // Toggle bottom detail panel (Table mode only)
-        KeyCode::Enter | KeyCode::Char('d') => {
-            if app.view_mode == ViewMode::Table {
-                app.show_details = !app.show_details;
-            }
+        KeyCode::Enter | KeyCode::Char('d') if app.view_mode == ViewMode::Table => {
+            app.show_details = !app.show_details;
         }
 
         // Keys 1-3: bottom panel tabs (in Table mode)
-        KeyCode::Char('1') => {
-            if app.view_mode == ViewMode::Table {
-                app.detail_tab = DetailTab::Tree;
-                app.show_details = true;
-            }
+        KeyCode::Char('1') if app.view_mode == ViewMode::Table => {
+            app.detail_tab = DetailTab::Tree;
+            app.show_details = true;
         }
-        KeyCode::Char('2') => {
-            if app.view_mode == ViewMode::Table {
-                app.detail_tab = DetailTab::Interface;
-                app.show_details = true;
-            }
+        KeyCode::Char('2') if app.view_mode == ViewMode::Table => {
+            app.detail_tab = DetailTab::Interface;
+            app.show_details = true;
         }
-        KeyCode::Char('3') => {
-            if app.view_mode == ViewMode::Table {
-                app.detail_tab = DetailTab::Connection;
-                app.show_details = true;
-            }
+        KeyCode::Char('3') if app.view_mode == ViewMode::Table => {
+            app.detail_tab = DetailTab::Connection;
+            app.show_details = true;
         }
 
         // Keys 4-7: toggle fullscreen views (press again = back to Table)
@@ -207,17 +210,33 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 ViewMode::Namespaces
             };
         }
+        KeyCode::Char('8') => {
+            app.scroll_offset = 0;
+            app.view_mode = if app.view_mode == ViewMode::SshHosts {
+                ViewMode::Table
+            } else {
+                ViewMode::SshHosts
+            };
+        }
+        KeyCode::Char('9') => {
+            app.scroll_offset = 0;
+            app.view_mode = if app.view_mode == ViewMode::Tunnels {
+                ViewMode::Table
+            } else {
+                ViewMode::Tunnels
+            };
+        }
 
         // Left/Right: switch bottom panel tabs in Table mode
-        KeyCode::Right | KeyCode::Char('l') => {
-            if app.view_mode == ViewMode::Table && app.show_details {
-                app.detail_tab = app.detail_tab.next();
-            }
+        KeyCode::Right | KeyCode::Char('l')
+            if app.view_mode == ViewMode::Table && app.show_details =>
+        {
+            app.detail_tab = app.detail_tab.next();
         }
-        KeyCode::Left | KeyCode::Char('h') => {
-            if app.view_mode == ViewMode::Table && app.show_details {
-                app.detail_tab = app.detail_tab.prev();
-            }
+        KeyCode::Left | KeyCode::Char('h')
+            if app.view_mode == ViewMode::Table && app.show_details =>
+        {
+            app.detail_tab = app.detail_tab.prev();
         }
 
         // Kill
@@ -260,39 +279,33 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
 
         // SSH port forwarding
-        KeyCode::Char('F') => {
-            if app.selected_entry().is_some() {
-                app.forward_prompt = true;
-                app.forward_input.clear();
-            }
+        KeyCode::Char('F') if app.selected_entry().is_some() => {
+            app.forward_prompt = true;
+            app.forward_input.clear();
         }
 
         // Sort (Table mode)
-        KeyCode::Tab => {
-            if app.view_mode == ViewMode::Table {
-                let cols = [
-                    SortColumn::Port,
-                    SortColumn::Service,
-                    SortColumn::Protocol,
-                    SortColumn::State,
-                    SortColumn::Pid,
-                    SortColumn::ProcessName,
-                    SortColumn::User,
-                ];
-                let idx = cols
-                    .iter()
-                    .position(|&c| c == app.session.sort.column)
-                    .unwrap_or(0);
-                let next = (idx + 1) % cols.len();
-                app.session.sort.toggle(cols[next]);
-                app.refresh();
-            }
+        KeyCode::Tab if app.view_mode == ViewMode::Table => {
+            let cols = [
+                SortColumn::Port,
+                SortColumn::Service,
+                SortColumn::Protocol,
+                SortColumn::State,
+                SortColumn::Pid,
+                SortColumn::ProcessName,
+                SortColumn::User,
+            ];
+            let idx = cols
+                .iter()
+                .position(|&c| c == app.session.sort.column)
+                .unwrap_or(0);
+            let next = (idx + 1) % cols.len();
+            app.session.sort.toggle(cols[next]);
+            app.refresh();
         }
-        KeyCode::BackTab => {
-            if app.view_mode == ViewMode::Table {
-                app.session.sort.ascending = !app.session.sort.ascending;
-                app.refresh();
-            }
+        KeyCode::BackTab if app.view_mode == ViewMode::Table => {
+            app.session.sort.ascending = !app.session.sort.ascending;
+            app.refresh();
         }
 
         // Language

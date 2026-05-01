@@ -29,6 +29,8 @@ pub fn draw(f: &mut Frame, app: &App) {
             ViewMode::Topology => draw_topology_fullscreen(f, app, chunks[1]),
             ViewMode::ProcessDetail => draw_process_detail_fullscreen(f, app, chunks[1]),
             ViewMode::Namespaces => draw_namespaces_fullscreen(f, app, chunks[1]),
+            ViewMode::SshHosts => crate::views::ssh_hosts::draw(f, app, chunks[1]),
+            ViewMode::Tunnels => crate::views::tunnels::draw(f, app, chunks[1]),
         }
     }
 
@@ -41,6 +43,9 @@ pub fn draw(f: &mut Frame, app: &App) {
     }
     if app.forward_prompt {
         draw_forward_prompt(f, app);
+    }
+    if app.tunnel_form.is_some() {
+        crate::views::tunnel_form::draw(f, app);
     }
 
     draw_footer(f, app, chunks[2]);
@@ -161,6 +166,8 @@ fn view_mode_label(mode: ViewMode) -> &'static str {
         ViewMode::Topology => s.view_topology,
         ViewMode::ProcessDetail => s.view_process,
         ViewMode::Namespaces => s.view_namespaces,
+        ViewMode::SshHosts => s.view_ssh_hosts,
+        ViewMode::Tunnels => s.view_tunnels,
     }
 }
 
@@ -554,7 +561,7 @@ fn draw_chart_fullscreen(f: &mut Frame, app: &App, area: Rect) {
             }
         }
         let mut v: Vec<_> = map.into_iter().collect();
-        v.sort_by(|a, b| b.1.cmp(&a.1));
+        v.sort_by_key(|b| std::cmp::Reverse(b.1));
         v
     };
     let max = counts.first().map(|c| c.1).unwrap_or(1).max(1);
@@ -1209,12 +1216,32 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
                 hint(&mut hints, "d", s.hint_details);
             }
             hint(&mut hints, "4-7", s.hint_views);
+            hint(&mut hints, "8", s.hint_ssh_hosts);
+            hint(&mut hints, "9", s.hint_tunnels);
             hint(&mut hints, "K", s.hint_kill);
             hint(&mut hints, "F", s.hint_forward);
             hint(&mut hints, "Tab", s.hint_sort);
             if !app.session.is_root && !app.session.is_elevated {
                 hint(&mut hints, "s", s.hint_sudo);
             }
+            hint(&mut hints, "q", s.hint_quit);
+        }
+        ViewMode::SshHosts => {
+            hint(&mut hints, "Esc", s.hint_back);
+            hint(&mut hints, "j/k", s.hint_navigate);
+            hint(&mut hints, "Enter", s.hint_open_tunnel);
+            hint(&mut hints, "r", s.hint_reload);
+            hint(&mut hints, "?", s.hint_help);
+            hint(&mut hints, "q", s.hint_quit);
+        }
+        ViewMode::Tunnels => {
+            hint(&mut hints, "Esc", s.hint_back);
+            hint(&mut hints, "j/k", s.hint_navigate);
+            hint(&mut hints, "n", s.hint_new_tunnel);
+            hint(&mut hints, "K", s.hint_kill_tunnel);
+            hint(&mut hints, "r", s.hint_restart_tunnel);
+            hint(&mut hints, "s", s.hint_save_tunnels);
+            hint(&mut hints, "?", s.hint_help);
             hint(&mut hints, "q", s.hint_quit);
         }
         _ => {

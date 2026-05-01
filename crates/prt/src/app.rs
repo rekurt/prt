@@ -4,16 +4,20 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
+use prt_core::config;
 use prt_core::core::alerts::{self, AlertAction, FiredAlert};
 use prt_core::core::firewall;
 use prt_core::core::namespace::NetNamespace;
 use prt_core::core::process_detail::ProcessDetail;
+use prt_core::core::ssh_config::{self, SshHost};
+use prt_core::core::ssh_tunnel::SshTunnelSpec;
 use prt_core::core::{killer, namespace, process_detail, session::Session};
 use prt_core::i18n;
 use prt_core::model::{DetailTab, EntryStatus, TrackedEntry, ViewMode, TICK_RATE};
 
 use crate::forward::ForwardManager;
 use crate::tracer::StraceSession;
+use crate::views::tunnel_form::TunnelFormState;
 use ratatui::prelude::*;
 use std::io::stdout;
 use std::time::Instant;
@@ -62,12 +66,22 @@ pub struct App {
     pub namespace_cache: Vec<(NetNamespace, Vec<u32>)>,
     /// Scroll offset for fullscreen views (Chart, Topology, Namespaces).
     pub scroll_offset: u16,
+    /// Saved SSH hosts (parsed from `~/.ssh/config` + prt config).
+    pub ssh_hosts: Vec<SshHost>,
+    /// Selected index in the SSH Hosts view.
+    pub ssh_hosts_selected: usize,
+    /// Selected index in the Tunnels view.
+    pub tunnels_selected: usize,
+    /// Active "new tunnel" form, if any.
+    pub tunnel_form: Option<TunnelFormState>,
 }
 
 impl App {
     pub fn new() -> Self {
-        Self {
-            session: Session::new(),
+        let session = Session::new();
+        let ssh_hosts = ssh_config::load_known_hosts(&session.config.ssh_hosts);
+        let mut app = Self {
+            session,
             filtered_indices: Vec::new(),
             selected: 0,
             filter: String::new(),
@@ -91,6 +105,138 @@ impl App {
             detail_cache: None,
             namespace_cache: Vec::new(),
             scroll_offset: 0,
+            ssh_hosts,
+            ssh_hosts_selected: 0,
+            tunnels_selected: 0,
+            tunnel_form: None,
+        };
+        app.autostart_tunnels();
+        app
+    }
+
+    /// Best-effort: spawn each tunnel listed in the loaded prt config.
+    /// Failures are recorded as status messages but never abort startup.
+    fn autostart_tunnels(&mut self) {
+        let configs = self.session.config.ssh_tunnels.clone();
+        if configs.is_empty() {
+            return;
+        }
+        let mut started = 0usize;
+        let mut failed = 0usize;
+        for cfg in &configs {
+            let spec = match cfg.to_spec() {
+                Some(s) => s,
+                None => {
+                    failed += 1;
+                    continue;
+                }
+            };
+            let host = self.host_for_alias(&spec.host_alias).cloned();
+            match self.forwards.add_spec_with_host(spec, host.as_ref()) {
+                Ok(_) => started += 1,
+                Err(_) => failed += 1,
+            }
+        }
+        if started > 0 || failed > 0 {
+            self.set_status(format!("tunnels: {started} started, {failed} failed"));
+        }
+    }
+
+    /// Look up a known host by alias.
+    fn host_for_alias(&self, alias: &str) -> Option<&SshHost> {
+        self.ssh_hosts.iter().find(|h| h.alias == alias)
+    }
+
+    /// Reload SSH hosts: re-reads `~/.config/prt/config.toml` from disk so
+    /// edits made while prt is running take effect, then merges with
+    /// `~/.ssh/config`.
+    pub fn reload_ssh_hosts(&mut self) {
+        self.session.config = config::load_config();
+        self.ssh_hosts = ssh_config::load_known_hosts(&self.session.config.ssh_hosts);
+        if self.ssh_hosts_selected >= self.ssh_hosts.len() {
+            self.ssh_hosts_selected = self.ssh_hosts.len().saturating_sub(1);
+        }
+        let s = i18n::strings();
+        self.set_status(s.ssh_hosts_reloaded.into());
+    }
+
+    /// Open the new-tunnel form, optionally pre-filling the SSH host alias.
+    pub fn open_tunnel_form(&mut self, prefill_alias: Option<String>) {
+        self.tunnel_form = Some(TunnelFormState::new(prefill_alias));
+    }
+
+    /// Spawn a tunnel from a fully-validated spec.
+    pub fn create_tunnel(&mut self, spec: SshTunnelSpec) {
+        let summary = spec.summary();
+        let host = self.host_for_alias(&spec.host_alias).cloned();
+        match self.forwards.add_spec_with_host(spec, host.as_ref()) {
+            Ok(_) => {
+                self.tunnels_selected = self.forwards.tunnels.len().saturating_sub(1);
+                self.set_status(format!("tunnel: {summary}"));
+            }
+            Err(e) => {
+                let s = i18n::strings();
+                self.set_status(format!("{}: {e}", s.tunnel_create_failed));
+            }
+        }
+    }
+
+    /// Clamp `tunnels_selected` into the current tunnel list. Called before
+    /// dispatching kill/restart actions so async `cleanup()` can't leave the
+    /// stored index pointing past the end.
+    fn clamp_tunnels_selected(&mut self) -> Option<usize> {
+        let count = self.forwards.tunnels.len();
+        if count == 0 {
+            self.tunnels_selected = 0;
+            return None;
+        }
+        if self.tunnels_selected >= count {
+            self.tunnels_selected = count - 1;
+        }
+        Some(self.tunnels_selected)
+    }
+
+    /// Kill the currently selected tunnel and adjust the selection.
+    pub fn kill_selected_tunnel(&mut self) {
+        let idx = match self.clamp_tunnels_selected() {
+            Some(i) => i,
+            None => return,
+        };
+        self.forwards.kill_at(idx);
+        if self.tunnels_selected >= self.forwards.tunnels.len() {
+            self.tunnels_selected = self.forwards.tunnels.len().saturating_sub(1);
+        }
+        let s = i18n::strings();
+        self.set_status(s.tunnel_killed.into());
+    }
+
+    /// Restart the currently selected tunnel.
+    pub fn restart_selected_tunnel(&mut self) {
+        let idx = match self.clamp_tunnels_selected() {
+            Some(i) => i,
+            None => return,
+        };
+        let s = i18n::strings();
+        match self.forwards.restart_at(idx) {
+            Ok(()) => self.set_status(s.tunnel_restarted.into()),
+            Err(e) => self.set_status(format!("{}: {e}", s.tunnel_create_failed)),
+        }
+    }
+
+    /// Persist the current set of active tunnels to the user's config file.
+    pub fn save_tunnels(&mut self) {
+        let path = match config::config_path() {
+            Some(p) => p,
+            None => {
+                self.set_status("config path unavailable".into());
+                return;
+            }
+        };
+        let specs = self.forwards.specs();
+        let s = i18n::strings();
+        match config::write_tunnels(&path, &specs) {
+            Ok(()) => self.set_status(format!("{} ({})", s.tunnels_saved, specs.len())),
+            Err(e) => self.set_status(format!("save failed: {e}")),
         }
     }
 

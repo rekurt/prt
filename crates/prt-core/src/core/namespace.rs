@@ -72,7 +72,7 @@ pub fn group_by_namespace(pid_ns: &HashMap<u32, NetNamespace>) -> Vec<(NetNamesp
     }
 
     let mut groups: Vec<_> = by_inode.into_values().collect();
-    groups.sort_by(|a, b| a.0.label().cmp(&b.0.label()));
+    groups.sort_by_key(|a| a.0.label());
     for (_, pids) in &mut groups {
         pids.sort();
     }
