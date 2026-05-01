@@ -16,7 +16,6 @@ pub static STRINGS: Strings = Strings {
 
     view_topology: "Топология",
     view_process: "Процесс",
-    view_namespaces: "Namespaces",
 
     process_not_found: "процесс не найден",
 
@@ -58,7 +57,6 @@ pub static STRINGS: Strings = Strings {
   Полноэкранные режимы:
   5            Топология (процесс → порт → удалённый)
   6            Детали процесса (инфо, файлы, env)
-  7            Namespaces (только Linux)
 
   Действия:
   K/Del        завершить процесс

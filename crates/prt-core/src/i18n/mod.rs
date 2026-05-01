@@ -137,7 +137,6 @@ pub struct Strings {
     // View mode labels (fullscreen views)
     pub view_topology: &'static str,
     pub view_process: &'static str,
-    pub view_namespaces: &'static str,
 
     // Tree view
     pub process_not_found: &'static str,

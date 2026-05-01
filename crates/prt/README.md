@@ -27,7 +27,7 @@ cargo install prt
 | **Suspicious detector** | `[!]` flags for non-root on privileged ports, scripts on sensitive ports |
 | **Process tree** | Full parent chain (e.g. `launchd → nginx → worker`) |
 | **Detail panel** | Tree / Network / Connection tabs (`1` `2` `3`) |
-| **Fullscreen views** | Chart (`4`), Topology (`5`), Process detail (`6`), Namespaces (`7`) |
+| **Fullscreen views** | Topology (`5`), Process detail (`6`) |
 | **Search & filter** | By port, service, process, PID, protocol, state, user. `!` = suspicious |
 | **Kill** | Select → `K` → `y` (SIGTERM) or `f` (SIGKILL) |
 | **Firewall block** | `b` → block remote IP with undo command |
@@ -58,7 +58,7 @@ sudo prt                # run as root
 
 **Panel:** `Enter`/`d` toggle details, `1`-`3` tabs, `←`/`→` switch tabs
 
-**Views:** `4` chart, `5` topology, `6` process detail, `7` namespaces
+**Views:** `5` topology, `6` process detail
 
 **Actions:** `K` kill, `c` copy, `p` copy PID, `b` block IP, `t` strace, `F` forward, `Tab` sort, `L` language
 

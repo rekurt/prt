@@ -16,7 +16,6 @@ pub static STRINGS: Strings = Strings {
 
     view_topology: "拓扑",
     view_process: "进程详情",
-    view_namespaces: "命名空间",
 
     process_not_found: "未找到进程",
 
@@ -58,7 +57,6 @@ pub static STRINGS: Strings = Strings {
   全屏模式:
   5            拓扑 (进程 → 端口 → 远程)
   6            进程详情 (信息、文件、环境变量)
-  7            命名空间 (仅Linux)
 
   操作:
   K/Del        终止进程

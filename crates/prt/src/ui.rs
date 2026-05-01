@@ -27,7 +27,6 @@ pub fn draw(f: &mut Frame, app: &App) {
             ViewMode::Table => draw_table_view(f, app, chunks[1]),
             ViewMode::Topology => draw_topology_fullscreen(f, app, chunks[1]),
             ViewMode::ProcessDetail => draw_process_detail_fullscreen(f, app, chunks[1]),
-            ViewMode::Namespaces => draw_namespaces_fullscreen(f, app, chunks[1]),
             ViewMode::SshHosts => crate::views::ssh_hosts::draw(f, app, chunks[1]),
             ViewMode::Tunnels => crate::views::tunnels::draw(f, app, chunks[1]),
         }
@@ -163,7 +162,6 @@ fn view_mode_label(mode: ViewMode) -> &'static str {
         ViewMode::Table => "",
         ViewMode::Topology => s.view_topology,
         ViewMode::ProcessDetail => s.view_process,
-        ViewMode::Namespaces => s.view_namespaces,
         ViewMode::SshHosts => s.view_ssh_hosts,
         ViewMode::Tunnels => s.view_tunnels,
     }
@@ -838,79 +836,6 @@ fn draw_process_detail_fullscreen(f: &mut Frame, app: &App, area: Rect) {
     }
 
     f.render_widget(Paragraph::new(right_lines), columns[1]);
-}
-
-// ── Fullscreen: Namespaces ───────────────────────────────────────
-
-fn draw_namespaces_fullscreen(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {} ", s.view_namespaces))
-        .title_alignment(Alignment::Left)
-        .border_style(Style::default().fg(Color::Cyan));
-
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
-    if !cfg!(target_os = "linux") {
-        f.render_widget(
-            Paragraph::new("  Network namespaces are only available on Linux"),
-            inner,
-        );
-        return;
-    }
-
-    if app.session.entries.is_empty() {
-        f.render_widget(Paragraph::new(s.no_selected_process), inner);
-        return;
-    }
-
-    if app.namespace_cache.is_empty() {
-        f.render_widget(
-            Paragraph::new("  No namespace information available (requires /proc access)"),
-            inner,
-        );
-        return;
-    }
-
-    let mut lines: Vec<Line> = Vec::new();
-    for (ns, group_pids) in &app.namespace_cache {
-        lines.push(Line::from(vec![Span::styled(
-            format!("  {} ({} processes)", ns.label(), group_pids.len()),
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )]));
-
-        for &pid in group_pids.iter().take(12) {
-            let name = app
-                .session
-                .entries
-                .iter()
-                .find(|e| e.entry.process.pid == pid)
-                .map(|e| e.entry.process.name.as_str())
-                .unwrap_or("?");
-            lines.push(Line::from(format!(
-                "    \u{251c}\u{2500} {name} (PID {pid})"
-            )));
-        }
-        if group_pids.len() > 12 {
-            lines.push(Line::from(Span::styled(
-                format!("    \u{2514}\u{2500} ... +{} more", group_pids.len() - 12),
-                Style::default().fg(Color::DarkGray),
-            )));
-        }
-    }
-
-    let max_scroll = (lines.len() as u16).saturating_sub(inner.height);
-    let scroll = app.scroll_offset.min(max_scroll);
-    f.render_widget(
-        Paragraph::new(lines)
-            .wrap(Wrap { trim: false })
-            .scroll((scroll, 0)),
-        inner,
-    );
 }
 
 // ── Tracer panel (strace split) ──────────────────────────────────

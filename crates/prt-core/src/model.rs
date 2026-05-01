@@ -284,8 +284,6 @@ pub enum ViewMode {
     Topology,
     /// Fullscreen process detail: cwd, env, files, CPU/RAM, connections.
     ProcessDetail,
-    /// Fullscreen network namespace grouping (Linux only).
-    Namespaces,
     /// Fullscreen list of saved SSH hosts (from `~/.ssh/config` + prt config).
     SshHosts,
     /// Fullscreen SSH tunnels manager.

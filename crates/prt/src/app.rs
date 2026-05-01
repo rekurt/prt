@@ -7,13 +7,12 @@ use crossterm::ExecutableCommand;
 use prt_core::config;
 use prt_core::core::alerts::{self, AlertAction, FiredAlert};
 use prt_core::core::firewall;
-use prt_core::core::namespace::NetNamespace;
 use prt_core::core::process_detail::ProcessDetail;
 use prt_core::core::ssh_config::{self, SshHost};
 use prt_core::core::ssh_tunnel::SshTunnelSpec;
-use prt_core::core::{killer, namespace, process_detail, session::Session};
+use prt_core::core::{killer, process_detail, session::Session};
 use prt_core::i18n;
-use prt_core::model::{DetailTab, EntryStatus, TrackedEntry, ViewMode, TICK_RATE};
+use prt_core::model::{DetailTab, TrackedEntry, ViewMode, TICK_RATE};
 
 use crate::forward::ForwardManager;
 use crate::tracer::StraceSession;
@@ -40,7 +39,7 @@ pub struct App {
     pub show_help: bool,
     pub show_details: bool,
     pub detail_tab: DetailTab,
-    /// Main view mode: Table, Chart, Topology, ProcessDetail, Namespaces.
+    /// Main view mode: Table, Topology, ProcessDetail.
     pub view_mode: ViewMode,
     pub confirm_kill: Option<(u32, String)>,
     pub sudo_prompt: bool,
@@ -62,9 +61,7 @@ pub struct App {
     pub tracer: Option<StraceSession>,
     /// Cached process detail (PID → detail). Refreshed on PID change or refresh.
     pub detail_cache: Option<(u32, ProcessDetail)>,
-    /// Cached namespace data. Refreshed each scan cycle.
-    pub namespace_cache: Vec<(NetNamespace, Vec<u32>)>,
-    /// Scroll offset for fullscreen views (Chart, Topology, Namespaces).
+    /// Scroll offset for fullscreen views (Topology).
     pub scroll_offset: u16,
     /// Saved SSH hosts (parsed from `~/.ssh/config` + prt config).
     pub ssh_hosts: Vec<SshHost>,
@@ -103,7 +100,6 @@ impl App {
             forward_input: String::new(),
             tracer: None,
             detail_cache: None,
-            namespace_cache: Vec::new(),
             scroll_offset: 0,
             ssh_hosts,
             ssh_hosts_selected: 0,
@@ -246,8 +242,6 @@ impl App {
         }
         // Evaluate alert rules
         self.active_alerts = alerts::evaluate(&self.session.config.alerts, &self.session.entries);
-        // Refresh caches
-        self.refresh_namespace_cache();
         // Invalidate detail cache to pick up fresh data
         self.detail_cache = None;
         self.update_filtered();
@@ -435,20 +429,6 @@ impl App {
             }
         }
         self.detail_cache.as_ref().map(|(_, d)| d)
-    }
-
-    /// Refresh namespace cache (called once per refresh cycle, not per frame).
-    fn refresh_namespace_cache(&mut self) {
-        let pids: Vec<u32> = self
-            .session
-            .entries
-            .iter()
-            .filter(|e| e.status != EntryStatus::Gone)
-            .map(|e| e.entry.process.pid)
-            .collect();
-
-        let ns_map = namespace::resolve_namespaces(&pids);
-        self.namespace_cache = namespace::group_by_namespace(&ns_map);
     }
 
     pub fn open_sudo_prompt(&mut self, purpose: SudoPurpose) {

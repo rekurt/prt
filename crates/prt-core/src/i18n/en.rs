@@ -16,7 +16,6 @@ pub static STRINGS: Strings = Strings {
 
     view_topology: "Topology",
     view_process: "Process",
-    view_namespaces: "Namespaces",
 
     process_not_found: "process not found",
 
@@ -58,7 +57,6 @@ pub static STRINGS: Strings = Strings {
   Fullscreen views:
   5            Topology (process -> port -> remote)
   6            Process detail (info, files, env)
-  7            Namespaces (Linux only)
 
   Actions:
   K/Del        kill process

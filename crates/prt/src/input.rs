@@ -194,14 +194,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 ViewMode::ProcessDetail
             };
         }
-        KeyCode::Char('7') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::Namespaces {
-                ViewMode::Table
-            } else {
-                ViewMode::Namespaces
-            };
-        }
         KeyCode::Char('8') => {
             app.scroll_offset = 0;
             app.view_mode = if app.view_mode == ViewMode::SshHosts {
