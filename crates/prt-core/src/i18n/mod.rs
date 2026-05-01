@@ -128,10 +128,9 @@ pub struct Strings {
     pub filter_label: &'static str,
     pub search_mode: &'static str,
 
-    // Detail tabs
-    pub tab_tree: &'static str,
-    pub tab_network: &'static str,
-    pub tab_connection: &'static str,
+    // Bottom Details panel
+    pub detail_panel_title: &'static str,
+    pub detail_panel_tree_header: &'static str,
     pub no_selected_process: &'static str,
 
     // View mode labels (fullscreen views)
@@ -194,7 +193,6 @@ pub struct Strings {
     pub hint_block: &'static str,
     pub hint_trace: &'static str,
     pub hint_navigate: &'static str,
-    pub hint_tabs: &'static str,
 
     // Forward dialog
     pub forward_prompt_title: &'static str,

@@ -9,9 +9,8 @@ pub static STRINGS: Strings = Strings {
     filter_label: "filter:",
     search_mode: "[SEARCH]",
 
-    tab_tree: "Tree",
-    tab_network: "Network",
-    tab_connection: "Connection",
+    detail_panel_title: "Details",
+    detail_panel_tree_header: "Process tree:",
     no_selected_process: " no process selected",
 
     view_topology: "Topology",
@@ -49,10 +48,7 @@ pub static STRINGS: Strings = Strings {
   g/G          jump to start / end
 
   Bottom panel (Table mode):
-  Enter/d      show/hide detail panel
-  1/2/3        Tree / Network / Connection tab
-  Left/Right   switch detail tab
-  h/l          switch detail tab
+  Enter/d      show/hide details panel
 
   Fullscreen views:
   5            Topology (process -> port -> remote)
@@ -101,7 +97,6 @@ pub static STRINGS: Strings = Strings {
     hint_block: "block IP",
     hint_trace: "trace",
     hint_navigate: "navigate",
-    hint_tabs: "tabs",
 
     forward_prompt_title: " SSH Forward ",
     forward_host_label: " host:port → ",

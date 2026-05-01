@@ -1,9 +1,7 @@
 use crate::app::App;
 use prt_core::core::{bandwidth, process_detail, scanner};
 use prt_core::i18n;
-use prt_core::model::{
-    ConnectionState, DetailTab, EntryStatus, SortColumn, TrackedEntry, ViewMode,
-};
+use prt_core::model::{ConnectionState, EntryStatus, SortColumn, TrackedEntry, ViewMode};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use std::time::{Duration, Instant};
@@ -338,98 +336,26 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
 // ── Bottom detail panel (Table mode only) ────────────────────────
 
 fn draw_detail_panel(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(area);
-
-    draw_tab_bar(f, app, chunks[0]);
-
-    let block = Block::default().borders(Borders::ALL & !Borders::TOP);
-    let inner = block.inner(chunks[1]);
-    f.render_widget(block, chunks[1]);
-
-    match app.detail_tab {
-        DetailTab::Tree => draw_tab_tree(f, app, inner),
-        DetailTab::Interface => draw_tab_interface(f, app, inner),
-        DetailTab::Connection => draw_tab_connection(f, app, inner),
-    }
-}
-
-fn tab_label(tab: DetailTab) -> &'static str {
     let s = i18n::strings();
-    match tab {
-        DetailTab::Tree => s.tab_tree,
-        DetailTab::Interface => s.tab_network,
-        DetailTab::Connection => s.tab_connection,
-    }
-}
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" {} ", s.detail_panel_title))
+        .title_alignment(Alignment::Left)
+        .border_style(Style::default().fg(Color::DarkGray));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
 
-fn draw_tab_bar(f: &mut Frame, app: &App, area: Rect) {
-    let mut spans = vec![Span::raw("\u{250c}")];
-    for &tab in DetailTab::ALL {
-        let key = tab.key_label();
-        let label = tab_label(tab);
-        let active = tab == app.detail_tab;
-        let style = if active {
-            Style::default().fg(Color::Black).bg(Color::Cyan)
-        } else {
-            Style::default().fg(Color::DarkGray)
-        };
-        spans.push(Span::styled(format!(" {key}:{label} "), style));
-    }
-    spans.push(Span::styled(
-        "\u{2500}".repeat(
-            area.width
-                .saturating_sub(spans.iter().map(|s| s.width() as u16).sum::<u16>())
-                as usize,
-        ),
-        Style::default().fg(Color::DarkGray),
-    ));
-
-    f.render_widget(Line::from(spans), area);
-}
-
-// ── Detail tab: Tree ─────────────────────────────────────────────
-
-fn draw_tab_tree(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
     let entry = match app.selected_entry() {
         Some(e) => e,
         None => {
-            f.render_widget(Paragraph::new(s.no_selected_process), area);
-            return;
-        }
-    };
-
-    let tree_lines = scanner::build_process_tree(&app.session.entries, entry.entry.process.pid);
-    let lines: Vec<Line> = tree_lines
-        .iter()
-        .map(|l| Line::from(format!("  {l}")))
-        .collect();
-
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
-}
-
-// ── Detail tab: Interface ────────────────────────────────────────
-
-fn draw_tab_interface(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
-    let entry = match app.selected_entry() {
-        Some(e) => e,
-        None => {
-            f.render_widget(Paragraph::new(s.no_selected_process), area);
+            f.render_widget(Paragraph::new(s.no_selected_process), inner);
             return;
         }
     };
 
     let e = &entry.entry;
+    let p = &e.process;
     let iface = scanner::resolve_interface(&e.local_addr);
-    let ip_version = if e.local_addr.is_ipv4() {
-        "IPv4"
-    } else {
-        "IPv6"
-    };
     let bind_type = if e.local_addr.ip().is_loopback() {
         s.iface_localhost_only
     } else if e.local_addr.ip().is_unspecified() {
@@ -437,60 +363,26 @@ fn draw_tab_interface(f: &mut Frame, app: &App, area: Rect) {
     } else {
         s.iface_specific
     };
+    let remote = e
+        .remote_addr
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| "-".into());
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(vec![
-            Span::styled(s.iface_address, Style::default().fg(Color::Cyan)),
-            Span::raw(e.local_addr.to_string()),
+            Span::styled(s.conn_local, Style::default().fg(Color::Cyan)),
+            Span::raw(format!(
+                "{}  {}  ({})",
+                e.local_addr, e.protocol, bind_type
+            )),
         ]),
         Line::from(vec![
             Span::styled(s.iface_interface, Style::default().fg(Color::Cyan)),
             Span::raw(iface),
         ]),
         Line::from(vec![
-            Span::styled(s.iface_protocol, Style::default().fg(Color::Cyan)),
-            Span::raw(format!("{} / {}", e.protocol, ip_version)),
-        ]),
-        Line::from(vec![
-            Span::styled(s.iface_bind, Style::default().fg(Color::Cyan)),
-            Span::raw(bind_type),
-        ]),
-    ];
-
-    f.render_widget(Paragraph::new(lines), area);
-}
-
-// ── Detail tab: Connection ───────────────────────────────────────
-
-fn draw_tab_connection(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
-    let entry = match app.selected_entry() {
-        Some(e) => e,
-        None => {
-            f.render_widget(Paragraph::new(s.no_selected_process), area);
-            return;
-        }
-    };
-
-    let e = &entry.entry;
-    let p = &e.process;
-
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled(s.conn_local, Style::default().fg(Color::Cyan)),
-            Span::raw(e.local_addr.to_string()),
-        ]),
-        Line::from(vec![
             Span::styled(s.conn_remote, Style::default().fg(Color::Cyan)),
-            Span::raw(
-                e.remote_addr
-                    .map(|a| a.to_string())
-                    .unwrap_or_else(|| "-".into()),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(s.conn_state, Style::default().fg(Color::Cyan)),
-            Span::raw(e.state.to_string()),
+            Span::raw(format!("{}  [{}]", remote, e.state)),
         ]),
         Line::from(vec![
             Span::styled(s.conn_process, Style::default().fg(Color::Cyan)),
@@ -509,7 +401,6 @@ fn draw_tab_connection(f: &mut Frame, app: &App, area: Rect) {
             s.fmt_all_ports(conns.len()),
             Style::default().fg(Color::DarkGray),
         )));
-
         for conn in &conns {
             let c = &conn.entry;
             let arrow = c
@@ -526,7 +417,19 @@ fn draw_tab_connection(f: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+    let tree_lines = scanner::build_process_tree(&app.session.entries, p.pid);
+    if !tree_lines.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            s.detail_panel_tree_header,
+            Style::default().fg(Color::DarkGray),
+        )));
+        for l in &tree_lines {
+            lines.push(Line::from(format!("  {l}")));
+        }
+    }
+
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
 // ── Fullscreen: Topology (process → port → remote) ──────────────
@@ -1073,9 +976,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
             // Table mode: context depends on whether detail panel is open
             hint(&mut hints, "?", s.hint_help);
             hint(&mut hints, "/", s.hint_search);
-            if app.show_details {
-                hint(&mut hints, "\u{2190}\u{2192}", s.hint_tabs);
-            } else {
+            if !app.show_details {
                 hint(&mut hints, "d", s.hint_details);
             }
             hint(&mut hints, "4-7", s.hint_views);

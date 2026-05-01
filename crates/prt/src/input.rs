@@ -1,7 +1,7 @@
 use crate::app::App;
 use crossterm::event::{KeyCode, KeyEvent};
 use prt_core::i18n;
-use prt_core::model::{DetailTab, SortColumn, ViewMode};
+use prt_core::model::{SortColumn, ViewMode};
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
     if app.show_help {
@@ -163,21 +163,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.show_details = !app.show_details;
         }
 
-        // Keys 1-3: bottom panel tabs (in Table mode)
-        KeyCode::Char('1') if app.view_mode == ViewMode::Table => {
-            app.detail_tab = DetailTab::Tree;
-            app.show_details = true;
-        }
-        KeyCode::Char('2') if app.view_mode == ViewMode::Table => {
-            app.detail_tab = DetailTab::Interface;
-            app.show_details = true;
-        }
-        KeyCode::Char('3') if app.view_mode == ViewMode::Table => {
-            app.detail_tab = DetailTab::Connection;
-            app.show_details = true;
-        }
-
-        // Keys 5-7: toggle fullscreen views (press again = back to Table)
+        // Keys 5-9: toggle fullscreen views (press again = back to Table)
         KeyCode::Char('5') => {
             app.scroll_offset = 0;
             app.view_mode = if app.view_mode == ViewMode::Topology {
@@ -209,18 +195,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             } else {
                 ViewMode::Tunnels
             };
-        }
-
-        // Left/Right: switch bottom panel tabs in Table mode
-        KeyCode::Right | KeyCode::Char('l')
-            if app.view_mode == ViewMode::Table && app.show_details =>
-        {
-            app.detail_tab = app.detail_tab.next();
-        }
-        KeyCode::Left | KeyCode::Char('h')
-            if app.view_mode == ViewMode::Table && app.show_details =>
-        {
-            app.detail_tab = app.detail_tab.prev();
         }
 
         // Kill

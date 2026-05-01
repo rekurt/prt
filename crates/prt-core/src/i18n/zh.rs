@@ -9,9 +9,8 @@ pub static STRINGS: Strings = Strings {
     filter_label: "过滤:",
     search_mode: "[搜索]",
 
-    tab_tree: "进程树",
-    tab_network: "网络",
-    tab_connection: "连接",
+    detail_panel_title: "详情",
+    detail_panel_tree_header: "进程树:",
     no_selected_process: " 未选择进程",
 
     view_topology: "拓扑",
@@ -50,9 +49,6 @@ pub static STRINGS: Strings = Strings {
 
   底部面板 (表格模式):
   Enter/d      显示/隐藏详情面板
-  1/2/3        进程树 / 网络 / 连接
-  左/右        切换标签页
-  h/l          切换标签页
 
   全屏模式:
   5            拓扑 (进程 → 端口 → 远程)
@@ -101,7 +97,6 @@ pub static STRINGS: Strings = Strings {
     hint_block: "封锁IP",
     hint_trace: "跟踪",
     hint_navigate: "导航",
-    hint_tabs: "标签",
 
     forward_prompt_title: " SSH隧道 ",
     forward_host_label: " 主机:端口 → ",

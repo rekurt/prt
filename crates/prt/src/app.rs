@@ -12,7 +12,7 @@ use prt_core::core::ssh_config::{self, SshHost};
 use prt_core::core::ssh_tunnel::SshTunnelSpec;
 use prt_core::core::{killer, process_detail, session::Session};
 use prt_core::i18n;
-use prt_core::model::{DetailTab, TrackedEntry, ViewMode, TICK_RATE};
+use prt_core::model::{TrackedEntry, ViewMode, TICK_RATE};
 
 use crate::forward::ForwardManager;
 use crate::tracer::StraceSession;
@@ -38,7 +38,6 @@ pub struct App {
     pub filter_mode: bool,
     pub show_help: bool,
     pub show_details: bool,
-    pub detail_tab: DetailTab,
     /// Main view mode: Table, Topology, ProcessDetail.
     pub view_mode: ViewMode,
     pub confirm_kill: Option<(u32, String)>,
@@ -85,7 +84,6 @@ impl App {
             filter_mode: false,
             show_help: false,
             show_details: true,
-            detail_tab: DetailTab::Tree,
             view_mode: ViewMode::default(),
             confirm_kill: None,
             sudo_prompt: false,

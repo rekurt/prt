@@ -9,9 +9,8 @@ pub static STRINGS: Strings = Strings {
     filter_label: "фильтр:",
     search_mode: "[ПОИСК]",
 
-    tab_tree: "Дерево",
-    tab_network: "Сеть",
-    tab_connection: "Соединение",
+    detail_panel_title: "Детали",
+    detail_panel_tree_header: "Дерево процессов:",
     no_selected_process: " нет выбранного процесса",
 
     view_topology: "Топология",
@@ -50,9 +49,6 @@ pub static STRINGS: Strings = Strings {
 
   Нижняя панель (режим таблицы):
   Enter/d      показать/скрыть панель деталей
-  1/2/3        Дерево / Сеть / Соединение
-  ←/→          переключение вкладок
-  h/l          переключение вкладок
 
   Полноэкранные режимы:
   5            Топология (процесс → порт → удалённый)
@@ -101,7 +97,6 @@ pub static STRINGS: Strings = Strings {
     hint_block: "блок. IP",
     hint_trace: "трасс.",
     hint_navigate: "навиг.",
-    hint_tabs: "вкладки",
 
     forward_prompt_title: " SSH-туннель ",
     forward_host_label: " хост:порт → ",
