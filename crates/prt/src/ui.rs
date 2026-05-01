@@ -43,6 +43,9 @@ pub fn draw(f: &mut Frame, app: &App) {
     if app.tunnel_form.is_some() {
         crate::views::tunnel_form::draw(f, app);
     }
+    if app.action_menu.is_some() {
+        crate::views::action_menu::draw(f, app);
+    }
 
     draw_footer(f, app, chunks[2]);
 }

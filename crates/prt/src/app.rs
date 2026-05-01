@@ -16,6 +16,7 @@ use prt_core::model::{ProcessesTab, SshTab, TrackedEntry, ViewMode, TICK_RATE};
 
 use crate::forward::ForwardManager;
 use crate::tracer::StraceSession;
+use crate::views::action_menu::ActionMenu;
 use crate::views::tunnel_form::TunnelFormState;
 use ratatui::prelude::*;
 use std::io::stdout;
@@ -74,6 +75,8 @@ pub struct App {
     pub tunnels_selected: usize,
     /// Active "new tunnel" form, if any.
     pub tunnel_form: Option<TunnelFormState>,
+    /// Active action menu overlay (Space-key popup), if any.
+    pub action_menu: Option<ActionMenu>,
 }
 
 impl App {
@@ -109,6 +112,7 @@ impl App {
             ssh_hosts_selected: 0,
             tunnels_selected: 0,
             tunnel_form: None,
+            action_menu: None,
         };
         app.autostart_tunnels();
         app

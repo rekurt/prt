@@ -103,6 +103,14 @@ pub static STRINGS: Strings = Strings {
     hint_action_menu: "操作",
     hint_edit_tunnel: "编辑",
 
+    action_menu_title: "操作",
+    action_kill: "终止进程",
+    action_copy: "复制行",
+    action_copy_pid: "复制 PID",
+    action_block: "封锁远程 IP",
+    action_trace: "跟踪系统调用",
+    action_forward: "SSH 转发",
+
     forward_prompt_title: " SSH隧道 ",
     forward_host_label: " 主机:端口 → ",
     forward_confirm_hint: " [Enter] 创建  [Esc] 取消",

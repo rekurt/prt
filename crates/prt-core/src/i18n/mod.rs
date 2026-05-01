@@ -200,6 +200,15 @@ pub struct Strings {
     pub hint_action_menu: &'static str,
     pub hint_edit_tunnel: &'static str,
 
+    // Action menu
+    pub action_menu_title: &'static str,
+    pub action_kill: &'static str,
+    pub action_copy: &'static str,
+    pub action_copy_pid: &'static str,
+    pub action_block: &'static str,
+    pub action_trace: &'static str,
+    pub action_forward: &'static str,
+
     // Forward dialog
     pub forward_prompt_title: &'static str,
     pub forward_host_label: &'static str,

@@ -103,6 +103,14 @@ pub static STRINGS: Strings = Strings {
     hint_action_menu: "actions",
     hint_edit_tunnel: "edit",
 
+    action_menu_title: "Actions",
+    action_kill: "Kill process",
+    action_copy: "Copy line",
+    action_copy_pid: "Copy PID",
+    action_block: "Block remote IP",
+    action_trace: "Trace syscalls",
+    action_forward: "SSH forward",
+
     forward_prompt_title: " SSH Forward ",
     forward_host_label: " host:port → ",
     forward_confirm_hint: " [Enter] create  [Esc] cancel",

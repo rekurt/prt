@@ -103,6 +103,14 @@ pub static STRINGS: Strings = Strings {
     hint_action_menu: "действия",
     hint_edit_tunnel: "правка",
 
+    action_menu_title: "Действия",
+    action_kill: "Убить процесс",
+    action_copy: "Копировать строку",
+    action_copy_pid: "Копировать PID",
+    action_block: "Блокировать IP",
+    action_trace: "Трассировать syscalls",
+    action_forward: "SSH-туннель",
+
     forward_prompt_title: " SSH-туннель ",
     forward_host_label: " хост:порт → ",
     forward_confirm_hint: " [Enter] создать  [Esc] отмена",

@@ -286,6 +286,20 @@ impl ProcessesTab {
     }
 }
 
+/// Action that can be invoked on the currently selected entry.
+///
+/// Triggered via the Space-key contextual menu (and a small set of direct
+/// shortcuts: `K` for Kill, `c` for Copy).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActionItem {
+    Kill,
+    Copy,
+    CopyPid,
+    BlockIp,
+    Trace,
+    Forward,
+}
+
 /// Sub-tab inside the SSH section.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SshTab {

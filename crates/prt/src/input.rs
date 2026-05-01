@@ -104,6 +104,17 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // Action menu overlay (highest priority after explicit forms/modals).
+    if crate::views::action_menu::handle_key(app, key) {
+        return;
+    }
+
+    // Space opens the action menu when nothing else is active.
+    if let KeyCode::Char(' ') = key.code {
+        crate::views::action_menu::open(app);
+        return;
+    }
+
     // Section navigation: Tab / Shift+Tab cycles top-level sections.
     match key.code {
         KeyCode::Tab => {
