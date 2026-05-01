@@ -75,8 +75,8 @@ fn parse_ssh_config_str(content: &str) -> Vec<SshHost> {
     let mut current: Vec<usize> = Vec::new(); // indices into result for active aliases
 
     for raw_line in content.lines() {
-        let trimmed = raw_line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
+        let trimmed = strip_inline_comment(raw_line.trim());
+        if trimmed.is_empty() {
             continue;
         }
 
@@ -148,6 +148,24 @@ fn split_kv(line: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some((key, line[j..].trim()))
+}
+
+/// Drop everything from the first unquoted `#` onward and trim trailing
+/// whitespace. OpenSSH treats `#` as the start of a comment anywhere on a
+/// line, including after a directive value (e.g. `Port 22 # ssh`).
+fn strip_inline_comment(s: &str) -> &str {
+    let bytes = s.as_bytes();
+    let mut in_quotes = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => in_quotes = !in_quotes,
+            b'#' if !in_quotes => return s[..i].trim_end(),
+            _ => {}
+        }
+        i += 1;
+    }
+    s
 }
 
 fn strip_quotes(s: &str) -> &str {
@@ -227,6 +245,24 @@ mod tests {
         let hosts = parse_ssh_config_str(cfg);
         assert_eq!(hosts.len(), 1);
         assert_eq!(hosts[0].alias, "prod");
+    }
+
+    #[test]
+    fn parse_strips_inline_comments() {
+        let cfg = "Host prod # primary db\n  HostName 10.0.0.5  # internal\n  Port 22 # ssh\n";
+        let hosts = parse_ssh_config_str(cfg);
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].alias, "prod");
+        assert_eq!(hosts[0].hostname.as_deref(), Some("10.0.0.5"));
+        assert_eq!(hosts[0].port, Some(22));
+    }
+
+    #[test]
+    fn parse_keeps_hash_inside_quotes() {
+        let cfg = "Host abc\n  HostName \"h#1.example\"\n";
+        let hosts = parse_ssh_config_str(cfg);
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].hostname.as_deref(), Some("h#1.example"));
     }
 
     #[test]
