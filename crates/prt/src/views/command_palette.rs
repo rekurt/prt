@@ -103,11 +103,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
                 palette.selected = (palette.selected + 1).min(count - 1);
             }
         }
-        KeyCode::Char(c) => {
-            if palette.input.len() < 128 {
-                palette.input.push(c);
-                palette.selected = 0;
-            }
+        KeyCode::Char(c) if palette.input.len() < 128 => {
+            palette.input.push(c);
+            palette.selected = 0;
         }
         KeyCode::Enter => {
             let input = palette.input.clone();
