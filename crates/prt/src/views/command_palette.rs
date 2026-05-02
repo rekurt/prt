@@ -94,10 +94,10 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
             palette.input.pop();
             palette.selected = 0;
         }
-        KeyCode::Up | KeyCode::Char('k') => {
+        KeyCode::Up => {
             palette.selected = palette.selected.saturating_sub(1);
         }
-        KeyCode::Down | KeyCode::Char('j') => {
+        KeyCode::Down => {
             let count = matching_commands(&palette.input).len();
             if count > 0 {
                 palette.selected = (palette.selected + 1).min(count - 1);
@@ -233,5 +233,18 @@ mod tests {
             .map(|command| command.label)
             .collect();
         assert_eq!(labels, vec!["tunnels"]);
+    }
+
+    #[test]
+    fn handle_key_allows_typing_j_and_k() {
+        let mut app = App::new();
+        open(&mut app);
+
+        handle_key(&mut app, KeyEvent::from(KeyCode::Char('k')));
+        handle_key(&mut app, KeyEvent::from(KeyCode::Char('j')));
+
+        let palette = app.command_palette.unwrap();
+        assert_eq!(palette.input, "kj");
+        assert_eq!(palette.selected, 0);
     }
 }

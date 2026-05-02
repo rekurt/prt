@@ -552,14 +552,12 @@ pub fn run() -> Result<()> {
         app.forwards.cleanup();
 
         if last_tick.elapsed() >= TICK_RATE {
-            if app.auto_refresh_paused {
-                last_tick = Instant::now();
-                continue;
-            }
-            app.refresh();
-            // Bell on alert (BEL char to terminal)
-            if app.should_bell() {
-                print!("\x07");
+            if !app.auto_refresh_paused {
+                app.refresh();
+                // Bell on alert (BEL char to terminal)
+                if app.should_bell() {
+                    print!("\x07");
+                }
             }
             last_tick = Instant::now();
         }

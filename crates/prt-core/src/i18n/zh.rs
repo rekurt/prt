@@ -44,7 +44,9 @@ pub static STRINGS: Strings = Strings {
   q            退出
   Tab / Sh+Tab 下 / 上 一个分区 (连接 | 进程 | SSH)
   Space        操作菜单 (终止 / 复制 / 封锁 / 跟踪 / 转发)
+  :            命令面板
   /            搜索 / 过滤   (Esc 两次清除)
+  p            暂停 / 恢复自动刷新
   r            刷新
   s            输入 sudo 密码
   L            切换语言
@@ -53,7 +55,8 @@ pub static STRINGS: Strings = Strings {
   j/k g/G      导航 / 跳到开头 | 结尾
 
   连接 (默认分区):
-  Enter / d    显示/隐藏底部详情面板
+  Enter        打开进程详情
+  d            显示/隐藏底部详情面板
   o / O        下一排序列 / 反转方向
 
   进程:

@@ -44,7 +44,9 @@ pub static STRINGS: Strings = Strings {
   q            quit
   Tab / Sh+Tab next / previous section (Connections | Processes | SSH)
   Space        action menu (Kill / Copy / Block / Trace / Forward)
+  :            command palette
   /            search / filter   (Esc twice to clear)
+  p            pause / resume auto-refresh
   r            refresh
   s            enter sudo password
   L            switch language
@@ -53,7 +55,8 @@ pub static STRINGS: Strings = Strings {
   j/k g/G      navigate / jump to start | end
 
   Connections (default section):
-  Enter / d    show / hide bottom Details panel
+  Enter        open Process detail
+  d            show / hide bottom Details panel
   o / O        next sort column / reverse direction
 
   Processes:
