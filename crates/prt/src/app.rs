@@ -17,6 +17,7 @@ use prt_core::model::{ProcessesTab, SshTab, TrackedEntry, ViewMode, TICK_RATE};
 use crate::forward::ForwardManager;
 use crate::tracer::StraceSession;
 use crate::views::action_menu::ActionMenu;
+use crate::views::command_palette::CommandPalette;
 use crate::views::tunnel_form::TunnelFormState;
 use ratatui::prelude::*;
 use std::io::stdout;
@@ -39,6 +40,7 @@ pub struct App {
     pub filter_mode: bool,
     pub show_help: bool,
     pub show_details: bool,
+    pub auto_refresh_paused: bool,
     /// Top-level section.
     pub view_mode: ViewMode,
     /// Sub-tab inside the Processes section.
@@ -77,6 +79,7 @@ pub struct App {
     pub tunnel_form: Option<TunnelFormState>,
     /// Active action menu overlay (Space-key popup), if any.
     pub action_menu: Option<ActionMenu>,
+    pub command_palette: Option<CommandPalette>,
     /// Timestamp of the last Esc press; used to arm the cascade
     /// (e.g. press Esc once to be warned, twice in <1.5s to clear filter).
     pub last_esc: Option<Instant>,
@@ -94,6 +97,7 @@ impl App {
             filter_mode: false,
             show_help: false,
             show_details: true,
+            auto_refresh_paused: false,
             view_mode: ViewMode::default(),
             processes_tab: ProcessesTab::default(),
             ssh_tab: SshTab::default(),
@@ -116,6 +120,7 @@ impl App {
             tunnels_selected: 0,
             tunnel_form: None,
             action_menu: None,
+            command_palette: None,
             last_esc: None,
         };
         app.autostart_tunnels();
@@ -170,7 +175,10 @@ impl App {
 
     /// Open the new-tunnel form, optionally pre-filling the SSH host alias.
     pub fn open_tunnel_form(&mut self, prefill_alias: Option<String>) {
-        self.tunnel_form = Some(TunnelFormState::new(prefill_alias));
+        self.tunnel_form = Some(match prefill_alias {
+            Some(alias) => TunnelFormState::new_from_host(alias),
+            None => TunnelFormState::new(None),
+        });
     }
 
     /// Open the tunnel form pre-populated from an existing tunnel for editing.
@@ -544,6 +552,10 @@ pub fn run() -> Result<()> {
         app.forwards.cleanup();
 
         if last_tick.elapsed() >= TICK_RATE {
+            if app.auto_refresh_paused {
+                last_tick = Instant::now();
+                continue;
+            }
             app.refresh();
             // Bell on alert (BEL char to terminal)
             if app.should_bell() {

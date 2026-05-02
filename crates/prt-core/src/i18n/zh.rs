@@ -71,6 +71,13 @@ pub static STRINGS: Strings = Strings {
     clipboard_unavailable: "剪贴板不可用",
     scan_error: "扫描错误",
     cancelled: "已取消",
+    paused: "自动刷新已暂停",
+    resumed: "自动刷新已恢复",
+    no_connections: " 无可见连接",
+    no_filter_matches: " 过滤无匹配",
+    more: "更多",
+    col_age: "时长",
+    col_remote: "远程",
 
     sudo_prompt_title: " 输入sudo密码 ",
     sudo_password_label: " 密码: ",
@@ -95,6 +102,8 @@ pub static STRINGS: Strings = Strings {
     hint_subtab: "标签",
     hint_action_menu: "操作",
     hint_edit_tunnel: "编辑",
+    hint_pause: "暂停",
+    hint_resume: "继续",
 
     action_menu_title: "操作",
     action_kill: "终止进程",
@@ -103,6 +112,9 @@ pub static STRINGS: Strings = Strings {
     action_block: "封锁远程 IP",
     action_trace: "跟踪系统调用",
     action_forward: "SSH 转发",
+    action_unavailable_no_remote: "无远程地址",
+    command_palette_title: "命令",
+    command_palette_empty: "无命令",
 
     esc_again_to_clear_filter: "再按 Esc 清除过滤",
     esc_again_to_discard_form: "再按 Esc 放弃更改",

@@ -13,8 +13,15 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 #[derive(Debug, Clone)]
 pub struct ActionMenu {
-    pub items: Vec<ActionItem>,
+    pub items: Vec<ActionMenuEntry>,
     pub selected: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ActionMenuEntry {
+    pub item: ActionItem,
+    pub enabled: bool,
+    pub reason: Option<&'static str>,
 }
 
 impl ActionMenu {
@@ -24,20 +31,31 @@ impl ActionMenu {
 
         let items = match app.view_mode {
             ViewMode::Connections => {
-                let mut v = vec![ActionItem::Kill, ActionItem::Copy, ActionItem::CopyPid];
-                if has_remote {
-                    v.push(ActionItem::BlockIp);
-                    v.push(ActionItem::Forward);
-                }
-                v.push(ActionItem::Trace);
+                let s = i18n::strings();
+                let mut v = vec![
+                    enabled(ActionItem::Kill),
+                    enabled(ActionItem::Copy),
+                    enabled(ActionItem::CopyPid),
+                ];
+                v.push(if has_remote {
+                    enabled(ActionItem::BlockIp)
+                } else {
+                    disabled(ActionItem::BlockIp, s.action_unavailable_no_remote)
+                });
+                v.push(if has_remote {
+                    enabled(ActionItem::Forward)
+                } else {
+                    disabled(ActionItem::Forward, s.action_unavailable_no_remote)
+                });
+                v.push(enabled(ActionItem::Trace));
                 v
             }
             ViewMode::Processes => {
                 vec![
-                    ActionItem::Kill,
-                    ActionItem::Copy,
-                    ActionItem::CopyPid,
-                    ActionItem::Trace,
+                    enabled(ActionItem::Kill),
+                    enabled(ActionItem::Copy),
+                    enabled(ActionItem::CopyPid),
+                    enabled(ActionItem::Trace),
                 ]
             }
             ViewMode::Ssh => return None,
@@ -88,15 +106,21 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
             let idx = (c as u8 - b'0') as usize;
             if idx >= 1 && idx <= menu.items.len() {
                 menu.selected = idx - 1;
-                let item = menu.items[menu.selected];
+                let entry = menu.items[menu.selected];
+                if !entry.enabled {
+                    return true;
+                }
                 app.action_menu = None;
-                execute(app, item);
+                execute(app, entry.item);
             }
         }
         KeyCode::Enter => {
-            let item = menu.items[menu.selected];
+            let entry = menu.items[menu.selected];
+            if !entry.enabled {
+                return true;
+            }
             app.action_menu = None;
-            execute(app, item);
+            execute(app, entry.item);
         }
         _ => {}
     }
@@ -170,20 +194,42 @@ pub fn draw(f: &mut Frame, app: &App) {
         .items
         .iter()
         .enumerate()
-        .map(|(i, item)| {
-            let style = if i == menu.selected {
+        .map(|(i, entry)| {
+            let style = if !entry.enabled {
+                Style::default().fg(Color::DarkGray)
+            } else if i == menu.selected {
                 Style::default().fg(Color::Black).bg(Color::Cyan)
             } else {
                 Style::default()
             };
+            let label = match entry.reason {
+                Some(reason) => format!(" {} ({reason}) ", action_label(entry.item)),
+                None => format!(" {} ", action_label(entry.item)),
+            };
             Line::from(vec![
                 Span::styled(format!(" {} ", i + 1), Style::default().fg(Color::DarkGray)),
-                Span::styled(format!(" {} ", action_label(*item)), style),
+                Span::styled(label, style),
             ])
         })
         .collect();
 
     f.render_widget(Paragraph::new(lines), inner);
+}
+
+fn enabled(item: ActionItem) -> ActionMenuEntry {
+    ActionMenuEntry {
+        item,
+        enabled: true,
+        reason: None,
+    }
+}
+
+fn disabled(item: ActionItem, reason: &'static str) -> ActionMenuEntry {
+    ActionMenuEntry {
+        item,
+        enabled: false,
+        reason: Some(reason),
+    }
 }
 
 fn action_label(item: ActionItem) -> &'static str {
@@ -205,7 +251,11 @@ mod tests {
     #[test]
     fn move_up_wraps_to_last() {
         let mut m = ActionMenu {
-            items: vec![ActionItem::Kill, ActionItem::Copy, ActionItem::CopyPid],
+            items: vec![
+                enabled(ActionItem::Kill),
+                enabled(ActionItem::Copy),
+                enabled(ActionItem::CopyPid),
+            ],
             selected: 0,
         };
         m.move_up();
@@ -215,7 +265,7 @@ mod tests {
     #[test]
     fn move_down_wraps_to_first() {
         let mut m = ActionMenu {
-            items: vec![ActionItem::Kill, ActionItem::Copy],
+            items: vec![enabled(ActionItem::Kill), enabled(ActionItem::Copy)],
             selected: 1,
         };
         m.move_down();

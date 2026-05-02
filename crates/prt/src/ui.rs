@@ -46,6 +46,9 @@ pub fn draw(f: &mut Frame, app: &App) {
     if app.action_menu.is_some() {
         crate::views::action_menu::draw(f, app);
     }
+    if app.command_palette.is_some() {
+        crate::views::command_palette::draw(f, app);
+    }
 
     draw_footer(f, app, chunks[2]);
 }
@@ -105,8 +108,10 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Black).bg(Color::Cyan),
         ),
         Span::raw(format!(
-            " {} ",
-            s.fmt_connections(app.filtered_indices.len())
+            " {}/{} {} ",
+            app.filtered_indices.len(),
+            app.session.entries.len(),
+            s.connections
         )),
     ];
 
@@ -133,6 +138,20 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         parts.push(Span::styled(
             format!(" {} ", s.search_mode),
             Style::default().fg(Color::Black).bg(Color::Green),
+        ));
+    }
+
+    if app.auto_refresh_paused {
+        parts.push(Span::styled(
+            " PAUSED ",
+            Style::default().fg(Color::Black).bg(Color::Yellow),
+        ));
+    }
+
+    if app.tracer.is_some() {
+        parts.push(Span::styled(
+            " TRACE ",
+            Style::default().fg(Color::Black).bg(Color::Magenta),
         ));
     }
 
@@ -267,10 +286,37 @@ fn show_container_column(width: u16, app: &App) -> bool {
             .any(|e| e.container_name.is_some())
 }
 
+fn show_age_column(width: u16) -> bool {
+    width > 100
+}
+
+fn show_remote_column(width: u16) -> bool {
+    width > 120
+}
+
+fn format_age(first_seen: Option<Instant>, now: Instant) -> String {
+    let Some(first_seen) = first_seen else {
+        return "-".into();
+    };
+    let secs = now.duration_since(first_seen).as_secs();
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else if secs < 86400 {
+        format!("{}h", secs / 3600)
+    } else {
+        format!("{}d", secs / 86400)
+    }
+}
+
 // ── Port table ───────────────────────────────────────────────────
 
 fn draw_table(f: &mut Frame, app: &App, area: Rect) {
+    let s = i18n::strings();
     let wide = show_service_column(area.width);
+    let show_age = show_age_column(area.width);
+    let show_remote = show_remote_column(area.width);
     let show_container = show_container_column(area.width, app);
 
     let mut header_cells = vec![Cell::from(format!(
@@ -299,6 +345,12 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
     if show_container {
         header_cells.push(Cell::from("Container"));
     }
+    if show_age {
+        header_cells.push(Cell::from(s.col_age));
+    }
+    if show_remote {
+        header_cells.push(Cell::from(s.col_remote));
+    }
 
     let header = Row::new(header_cells).style(
         Style::default()
@@ -307,6 +359,19 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
     );
 
     let now = Instant::now();
+    if app.filtered_indices.is_empty() {
+        let message = if app.filter.is_empty() {
+            s.no_connections.to_string()
+        } else {
+            format!("{}: {}", s.no_filter_matches, app.filter)
+        };
+        f.render_widget(
+            Paragraph::new(message).style(Style::default().fg(Color::DarkGray)),
+            area,
+        );
+        return;
+    }
+
     let rows: Vec<Row> = app
         .filtered_indices
         .iter()
@@ -340,6 +405,17 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
                     e.container_name.as_deref().unwrap_or("-").to_string(),
                 ));
             }
+            if show_age {
+                cells.push(Cell::from(format_age(e.first_seen, now)));
+            }
+            if show_remote {
+                cells.push(Cell::from(
+                    e.entry
+                        .remote_addr
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|| "-".into()),
+                ));
+            }
 
             Row::new(cells).style(style)
         })
@@ -358,6 +434,12 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
     ]);
     if show_container {
         widths.push(Constraint::Length(15));
+    }
+    if show_age {
+        widths.push(Constraint::Length(7));
+    }
+    if show_remote {
+        widths.push(Constraint::Length(24));
     }
 
     let table = Table::new(rows, widths)
@@ -973,6 +1055,31 @@ fn hint_accent(hints: &mut Vec<Span<'static>>, key: &str, color: Color) {
     ));
 }
 
+fn hint_cost(key: &str, label: &str) -> usize {
+    key.chars().count() + label.chars().count() + 4
+}
+
+fn push_budgeted_hints(
+    hints: &mut Vec<Span<'static>>,
+    items: &[(&'static str, &'static str)],
+    max_width: u16,
+    more_label: &'static str,
+) {
+    let mut used = 0usize;
+    let more_cost = hint_cost("?", more_label);
+    for (idx, (key, label)) in items.iter().enumerate() {
+        let cost = hint_cost(key, label);
+        let has_more = idx + 1 < items.len();
+        let reserved = if has_more { more_cost } else { 0 };
+        if used + cost + reserved > max_width as usize {
+            hint(hints, "?", more_label);
+            return;
+        }
+        hint(hints, key, label);
+        used += cost;
+    }
+}
+
 fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     let s = i18n::strings();
 
@@ -1003,52 +1110,63 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    let mut hints: Vec<Span> = Vec::new();
-
-    // Common hints across all sections
-    hint(&mut hints, "?", s.hint_help);
-    hint(&mut hints, "Tab", s.hint_section_next);
-    hint(&mut hints, "/", s.hint_search);
-    hint(&mut hints, "Space", s.hint_action_menu);
+    let mut items: Vec<(&'static str, &'static str)> = vec![
+        ("?", s.hint_help),
+        ("Tab", s.hint_section_next),
+        ("/", s.hint_search),
+        ("Space", s.hint_action_menu),
+        (
+            "p",
+            if app.auto_refresh_paused {
+                s.hint_resume
+            } else {
+                s.hint_pause
+            },
+        ),
+    ];
 
     match app.view_mode {
         ViewMode::Connections => {
             if !app.show_details {
-                hint(&mut hints, "d", s.hint_details);
+                items.push(("d", s.hint_details));
             }
-            hint(&mut hints, "K", s.hint_kill);
-            hint(&mut hints, "c", s.hint_copy);
-            hint(&mut hints, "o/O", s.hint_sort);
+            items.push(("Enter", s.view_process));
+            items.push(("K", s.hint_kill));
+            items.push(("c", s.hint_copy));
+            items.push(("o/O", s.hint_sort));
         }
         ViewMode::Processes => {
-            hint(&mut hints, "[ ]", s.hint_subtab);
-            hint(&mut hints, "K", s.hint_kill);
-            hint(&mut hints, "c", s.hint_copy);
+            items.push(("[ ]", s.hint_subtab));
+            items.push(("K", s.hint_kill));
+            items.push(("c", s.hint_copy));
         }
         ViewMode::Ssh => {
-            hint(&mut hints, "[ ]", s.hint_subtab);
+            items.push(("[ ]", s.hint_subtab));
             match app.ssh_tab {
                 SshTab::Hosts => {
-                    hint(&mut hints, "Enter", s.hint_open_tunnel);
-                    hint(&mut hints, "r", s.hint_reload);
+                    items.push(("Enter", s.hint_open_tunnel));
+                    items.push(("r", s.hint_reload));
                 }
                 SshTab::Tunnels => {
-                    hint(&mut hints, "n", s.hint_new_tunnel);
-                    hint(&mut hints, "e", s.hint_edit_tunnel);
-                    hint(&mut hints, "K", s.hint_kill_tunnel);
-                    hint(&mut hints, "r", s.hint_restart_tunnel);
-                    hint(&mut hints, "s", s.hint_save_tunnels);
+                    items.push(("n", s.hint_new_tunnel));
+                    items.push(("e", s.hint_edit_tunnel));
+                    items.push(("K", s.hint_kill_tunnel));
+                    items.push(("r", s.hint_restart_tunnel));
+                    items.push(("s", s.hint_save_tunnels));
                 }
             }
         }
     }
 
     if !app.session.is_root && !app.session.is_elevated && app.view_mode == ViewMode::Connections {
-        hint(&mut hints, "s", s.hint_sudo);
+        items.push(("s", s.hint_sudo));
     }
-    hint(&mut hints, "q", s.hint_quit);
+    items.push(("q", s.hint_quit));
 
-    // Language badge (always rightmost)
+    let mut hints: Vec<Span> = Vec::new();
+    let lang_width = i18n::lang().label().chars().count() + 4;
+    let max_hint_width = area.width.saturating_sub(lang_width as u16);
+    push_budgeted_hints(&mut hints, &items, max_hint_width, s.more);
     hints.push(Span::raw(" "));
     hint_accent(&mut hints, i18n::lang().label(), Color::Magenta);
 

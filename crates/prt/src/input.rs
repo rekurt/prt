@@ -113,8 +113,17 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    if crate::views::command_palette::handle_key(app, key) {
+        return;
+    }
+
     // Action menu overlay (highest priority after explicit forms/modals).
     if crate::views::action_menu::handle_key(app, key) {
+        return;
+    }
+
+    if let KeyCode::Char(':') = key.code {
+        crate::views::command_palette::open(app);
         return;
     }
 
@@ -223,8 +232,13 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.scroll_offset = u16::MAX;
         }
 
-        // Toggle bottom Details panel (Connections only)
-        KeyCode::Enter | KeyCode::Char('d') if app.view_mode == ViewMode::Connections => {
+        KeyCode::Enter if app.view_mode == ViewMode::Connections => {
+            app.view_mode = ViewMode::Processes;
+            app.processes_tab = ProcessesTab::Detail;
+            app.scroll_offset = 0;
+        }
+
+        KeyCode::Char('d') if app.view_mode == ViewMode::Connections => {
             app.show_details = !app.show_details;
         }
 
@@ -282,6 +296,16 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.scroll_offset = 0;
         }
 
+        KeyCode::Char('p') => {
+            app.auto_refresh_paused = !app.auto_refresh_paused;
+            let s = i18n::strings();
+            app.set_status(if app.auto_refresh_paused {
+                s.paused.into()
+            } else {
+                s.resumed.into()
+            });
+        }
+
         // Language
         KeyCode::Char('L') => {
             let current = i18n::lang();
@@ -291,5 +315,52 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.set_status(format!("{} → {}", s.lang_switched, next.label()));
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyEvent, KeyModifiers};
+    use prt_core::model::ViewMode;
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn enter_in_connections_opens_process_detail() {
+        let mut app = App::new();
+        app.view_mode = ViewMode::Connections;
+        app.show_details = true;
+
+        handle_key(&mut app, key(KeyCode::Enter));
+
+        assert_eq!(app.view_mode, ViewMode::Processes);
+        assert!(app.show_details);
+    }
+
+    #[test]
+    fn d_in_connections_toggles_bottom_details_only() {
+        let mut app = App::new();
+        app.view_mode = ViewMode::Connections;
+        app.show_details = true;
+
+        handle_key(&mut app, key(KeyCode::Char('d')));
+
+        assert_eq!(app.view_mode, ViewMode::Connections);
+        assert!(!app.show_details);
+    }
+
+    #[test]
+    fn p_toggles_auto_refresh_pause() {
+        let mut app = App::new();
+        assert!(!app.auto_refresh_paused);
+
+        handle_key(&mut app, key(KeyCode::Char('p')));
+        assert!(app.auto_refresh_paused);
+
+        handle_key(&mut app, key(KeyCode::Char('p')));
+        assert!(!app.auto_refresh_paused);
     }
 }

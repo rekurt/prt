@@ -71,6 +71,13 @@ pub static STRINGS: Strings = Strings {
     clipboard_unavailable: "буфер недоступен",
     scan_error: "ошибка сканирования",
     cancelled: "отменено",
+    paused: "автообновление на паузе",
+    resumed: "автообновление включено",
+    no_connections: " нет видимых соединений",
+    no_filter_matches: " нет совпадений по фильтру",
+    more: "ещё",
+    col_age: "Возраст",
+    col_remote: "Удалённый",
 
     sudo_prompt_title: " Введите пароль sudo ",
     sudo_password_label: " Пароль: ",
@@ -95,6 +102,8 @@ pub static STRINGS: Strings = Strings {
     hint_subtab: "вкладка",
     hint_action_menu: "действия",
     hint_edit_tunnel: "правка",
+    hint_pause: "пауза",
+    hint_resume: "продолж.",
 
     action_menu_title: "Действия",
     action_kill: "Убить процесс",
@@ -103,6 +112,9 @@ pub static STRINGS: Strings = Strings {
     action_block: "Блокировать IP",
     action_trace: "Трассировать syscalls",
     action_forward: "SSH-туннель",
+    action_unavailable_no_remote: "нет удалённого адреса",
+    command_palette_title: "Команда",
+    command_palette_empty: "команд нет",
 
     esc_again_to_clear_filter: "Esc ещё раз — стереть фильтр",
     esc_again_to_discard_form: "Esc ещё раз — отменить изменения",

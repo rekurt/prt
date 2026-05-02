@@ -71,6 +71,13 @@ pub static STRINGS: Strings = Strings {
     clipboard_unavailable: "clipboard unavailable",
     scan_error: "scan error",
     cancelled: "cancelled",
+    paused: "auto-refresh paused",
+    resumed: "auto-refresh resumed",
+    no_connections: " no connections visible",
+    no_filter_matches: " no matches for filter",
+    more: "more",
+    col_age: "Age",
+    col_remote: "Remote",
 
     sudo_prompt_title: " Enter sudo password ",
     sudo_password_label: " Password: ",
@@ -95,6 +102,8 @@ pub static STRINGS: Strings = Strings {
     hint_subtab: "tab",
     hint_action_menu: "actions",
     hint_edit_tunnel: "edit",
+    hint_pause: "pause",
+    hint_resume: "resume",
 
     action_menu_title: "Actions",
     action_kill: "Kill process",
@@ -103,6 +112,9 @@ pub static STRINGS: Strings = Strings {
     action_block: "Block remote IP",
     action_trace: "Trace syscalls",
     action_forward: "SSH forward",
+    action_unavailable_no_remote: "no remote address",
+    command_palette_title: "Command",
+    command_palette_empty: "no commands",
 
     esc_again_to_clear_filter: "Esc again to clear filter",
     esc_again_to_discard_form: "Esc again to discard changes",

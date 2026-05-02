@@ -172,6 +172,13 @@ pub struct Strings {
     pub scan_error: &'static str,
     pub cancelled: &'static str,
     pub lang_switched: &'static str,
+    pub paused: &'static str,
+    pub resumed: &'static str,
+    pub no_connections: &'static str,
+    pub no_filter_matches: &'static str,
+    pub more: &'static str,
+    pub col_age: &'static str,
+    pub col_remote: &'static str,
 
     // Sudo
     pub sudo_prompt_title: &'static str,
@@ -199,6 +206,8 @@ pub struct Strings {
     pub hint_subtab: &'static str,
     pub hint_action_menu: &'static str,
     pub hint_edit_tunnel: &'static str,
+    pub hint_pause: &'static str,
+    pub hint_resume: &'static str,
 
     // Action menu
     pub action_menu_title: &'static str,
@@ -208,6 +217,9 @@ pub struct Strings {
     pub action_block: &'static str,
     pub action_trace: &'static str,
     pub action_forward: &'static str,
+    pub action_unavailable_no_remote: &'static str,
+    pub command_palette_title: &'static str,
+    pub command_palette_empty: &'static str,
 
     // Esc cascade hints
     pub esc_again_to_clear_filter: &'static str,

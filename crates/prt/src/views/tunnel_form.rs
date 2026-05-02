@@ -41,6 +41,12 @@ impl TunnelFormState {
         }
     }
 
+    pub fn new_from_host(alias: String) -> Self {
+        let mut form = Self::new(Some(alias));
+        form.focused = TunnelFormField::LocalPort;
+        form
+    }
+
     /// Open the form in edit-mode for an existing tunnel.
     pub fn edit(spec: &SshTunnelSpec, idx: usize) -> Self {
         Self {
@@ -156,6 +162,46 @@ impl TunnelFormState {
         }
     }
 
+    pub fn visible_fields(&self) -> Vec<TunnelFormField> {
+        let mut fields = vec![TunnelFormField::Kind, TunnelFormField::LocalPort];
+        if self.kind == TunnelKind::Local {
+            fields.push(TunnelFormField::RemoteHost);
+            fields.push(TunnelFormField::RemotePort);
+        }
+        fields.push(TunnelFormField::HostAlias);
+        fields
+    }
+
+    pub fn command_preview(&self) -> String {
+        let local_port = if self.local_port.trim().is_empty() {
+            "<local-port>"
+        } else {
+            self.local_port.trim()
+        };
+        let host_alias = if self.host_alias.trim().is_empty() {
+            "<ssh-host>"
+        } else {
+            self.host_alias.trim()
+        };
+
+        match self.kind {
+            TunnelKind::Local => {
+                let remote_host = if self.remote_host.trim().is_empty() {
+                    "<remote-host>"
+                } else {
+                    self.remote_host.trim()
+                };
+                let remote_port = if self.remote_port.trim().is_empty() {
+                    "<remote-port>"
+                } else {
+                    self.remote_port.trim()
+                };
+                format!("ssh -N -L {local_port}:{remote_host}:{remote_port} {host_alias}")
+            }
+            TunnelKind::Dynamic => format!("ssh -N -D {local_port} {host_alias}"),
+        }
+    }
+
     pub fn build_spec(&self) -> Result<SshTunnelSpec, String> {
         let local_port: u16 = self
             .local_port
@@ -254,31 +300,25 @@ pub fn draw(f: &mut Frame, app: &App) {
         form.validate_field(TunnelFormField::LocalPort),
     ));
 
-    let dim_remote = form.kind == TunnelKind::Dynamic;
-    lines.push(field_line_dim(
-        s.tunnel_form_remote_host,
-        &form.remote_host,
-        form.focused == TunnelFormField::RemoteHost,
-        true,
-        dim_remote,
-        if dim_remote {
-            None
-        } else {
-            form.validate_field(TunnelFormField::RemoteHost)
-        },
-    ));
-    lines.push(field_line_dim(
-        s.tunnel_form_remote_port,
-        &form.remote_port,
-        form.focused == TunnelFormField::RemotePort,
-        true,
-        dim_remote,
-        if dim_remote {
-            None
-        } else {
-            form.validate_field(TunnelFormField::RemotePort)
-        },
-    ));
+    let visible_fields = form.visible_fields();
+    if visible_fields.contains(&TunnelFormField::RemoteHost) {
+        lines.push(field_line_dim(
+            s.tunnel_form_remote_host,
+            &form.remote_host,
+            form.focused == TunnelFormField::RemoteHost,
+            true,
+            false,
+            form.validate_field(TunnelFormField::RemoteHost),
+        ));
+        lines.push(field_line_dim(
+            s.tunnel_form_remote_port,
+            &form.remote_port,
+            form.focused == TunnelFormField::RemotePort,
+            true,
+            false,
+            form.validate_field(TunnelFormField::RemotePort),
+        ));
+    }
     lines.push(field_line(
         s.tunnel_form_host_alias,
         &form.host_alias,
@@ -287,6 +327,10 @@ pub fn draw(f: &mut Frame, app: &App) {
         form.validate_field(TunnelFormField::HostAlias),
     ));
     lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!(" {}", form.command_preview()),
+        Style::default().fg(Color::DarkGray),
+    )));
     lines.push(Line::from(Span::styled(
         s.tunnel_form_hint,
         Style::default().fg(Color::DarkGray),
@@ -539,5 +583,36 @@ mod tests {
         f.toggle_kind();
         assert_eq!(f.kind, TunnelKind::Dynamic);
         assert_eq!(f.focused, TunnelFormField::HostAlias);
+    }
+
+    #[test]
+    fn new_from_host_focuses_local_port() {
+        let f = TunnelFormState::new_from_host("prod".into());
+        assert_eq!(f.host_alias, "prod");
+        assert_eq!(f.focused, TunnelFormField::LocalPort);
+    }
+
+    #[test]
+    fn visible_fields_hide_remote_for_dynamic_tunnel() {
+        let mut f = TunnelFormState::new(None);
+        assert!(f.visible_fields().contains(&TunnelFormField::RemoteHost));
+        assert!(f.visible_fields().contains(&TunnelFormField::RemotePort));
+
+        f.kind = TunnelKind::Dynamic;
+
+        assert!(!f.visible_fields().contains(&TunnelFormField::RemoteHost));
+        assert!(!f.visible_fields().contains(&TunnelFormField::RemotePort));
+    }
+
+    #[test]
+    fn ssh_command_preview_describes_local_and_dynamic_tunnels() {
+        let mut f = TunnelFormState::new(Some("prod".into()));
+        f.local_port = "5433".into();
+        f.remote_host = "127.0.0.1".into();
+        f.remote_port = "5432".into();
+        assert_eq!(f.command_preview(), "ssh -N -L 5433:127.0.0.1:5432 prod");
+
+        f.kind = TunnelKind::Dynamic;
+        assert_eq!(f.command_preview(), "ssh -N -D 5433 prod");
     }
 }
