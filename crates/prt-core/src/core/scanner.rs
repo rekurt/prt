@@ -169,16 +169,61 @@ pub fn sort_entries(entries: &mut [TrackedEntry], state: &SortState) {
     });
 }
 
+fn matches_term(e: &TrackedEntry, term: &str) -> bool {
+    if term == "!" {
+        return !e.suspicious.is_empty();
+    }
+
+    if let Some((field, value)) = term.split_once(':') {
+        return matches_field_query(e, field, value);
+    }
+
+    matches_plain_query(e, term)
+}
+
+fn matches_field_query(e: &TrackedEntry, field: &str, value: &str) -> bool {
+    match field {
+        "port" => e.entry.local_port().to_string().contains(value),
+        "pid" => e.entry.process.pid.to_string().contains(value),
+        "proc" | "process" | "name" => e.entry.process.name.to_lowercase().contains(value),
+        "state" => e.entry.state.to_string().to_lowercase().contains(value),
+        "proto" | "protocol" => e.entry.protocol.to_string().to_lowercase().contains(value),
+        "user" => e
+            .entry
+            .process
+            .user
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains(value),
+        "service" => e
+            .service_name
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains(value),
+        "remote" => e
+            .entry
+            .remote_addr
+            .map(|a| a.to_string())
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains(value),
+        "container" => e
+            .container_name
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains(value),
+        _ => matches_plain_query(e, value),
+    }
+}
+
 /// Returns `true` if the entry matches the query string.
 ///
 /// Matches against: port number, process name, PID, protocol, state, user.
 /// All comparisons are case-insensitive.
-fn matches_query(e: &TrackedEntry, q: &str) -> bool {
-    // Special filter: "!" shows only suspicious entries
-    if q == "!" {
-        return !e.suspicious.is_empty();
-    }
-
+fn matches_plain_query(e: &TrackedEntry, q: &str) -> bool {
     e.entry.local_port().to_string().contains(q)
         || e.entry.process.name.to_lowercase().contains(q)
         || e.entry.process.pid.to_string().contains(q)
@@ -196,6 +241,17 @@ fn matches_query(e: &TrackedEntry, q: &str) -> bool {
             .unwrap_or("")
             .to_lowercase()
             .contains(q)
+        || e.entry
+            .remote_addr
+            .map(|a| a.to_string())
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains(q)
+        || e.container_name
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains(q)
 }
 
 /// Filter entries by query string, returning matching entries.
@@ -206,7 +262,11 @@ pub fn filter_entries<'a>(entries: &'a [TrackedEntry], query: &str) -> Vec<&'a T
         return entries.iter().collect();
     }
     let q = query.to_lowercase();
-    entries.iter().filter(|e| matches_query(e, &q)).collect()
+    let terms: Vec<&str> = q.split_whitespace().collect();
+    entries
+        .iter()
+        .filter(|e| terms.iter().all(|term| matches_term(e, term)))
+        .collect()
 }
 
 /// Filter entries by query, returning indices into the original slice.
@@ -216,10 +276,11 @@ pub fn filter_indices(entries: &[TrackedEntry], query: &str) -> Vec<usize> {
         return (0..entries.len()).collect();
     }
     let q = query.to_lowercase();
+    let terms: Vec<&str> = q.split_whitespace().collect();
     entries
         .iter()
         .enumerate()
-        .filter(|(_, e)| matches_query(e, &q))
+        .filter(|(_, e)| terms.iter().all(|term| matches_term(e, term)))
         .map(|(i, _)| i)
         .collect()
 }
@@ -857,6 +918,44 @@ mod tests {
             make_tracked(443, 2, "b", EntryStatus::Unchanged),
         ];
         assert_eq!(filter_indices(&entries, ""), vec![0, 1]);
+    }
+
+    #[test]
+    fn filter_field_queries_match_specific_columns() {
+        let mut entries = vec![
+            make_tracked(5432, 10, "postgres", EntryStatus::Unchanged),
+            make_tracked(8080, 20, "node", EntryStatus::Unchanged),
+        ];
+        entries[0].service_name = Some("postgres".into());
+        entries[0].entry.process.user = Some("db".into());
+        entries[0].entry.remote_addr = Some("10.0.0.5:55000".parse().unwrap());
+        entries[0].container_name = Some("db-primary".into());
+        entries[1].service_name = Some("http-alt".into());
+        entries[1].entry.process.user = Some("app".into());
+
+        assert_eq!(filter_indices(&entries, "port:5432"), vec![0]);
+        assert_eq!(filter_indices(&entries, "pid:20"), vec![1]);
+        assert_eq!(filter_indices(&entries, "proc:post"), vec![0]);
+        assert_eq!(filter_indices(&entries, "user:app"), vec![1]);
+        assert_eq!(filter_indices(&entries, "service:postgres"), vec![0]);
+        assert_eq!(filter_indices(&entries, "remote:10.0.0.5"), vec![0]);
+        assert_eq!(filter_indices(&entries, "container:primary"), vec![0]);
+    }
+
+    #[test]
+    fn filter_multiple_terms_are_and_combined() {
+        let mut entries = vec![
+            make_tracked(5432, 10, "postgres", EntryStatus::Unchanged),
+            make_tracked(5432, 20, "node", EntryStatus::Unchanged),
+        ];
+        entries[0].entry.process.user = Some("db".into());
+        entries[1].entry.process.user = Some("app".into());
+
+        assert_eq!(filter_indices(&entries, "port:5432 user:db"), vec![0]);
+        assert_eq!(
+            filter_indices(&entries, "port:5432 user:missing"),
+            Vec::<usize>::new()
+        );
     }
 
     // ── export: table-driven ──────────────────────────────────────

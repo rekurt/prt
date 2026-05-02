@@ -228,70 +228,99 @@ impl SortState {
     }
 }
 
-/// Tab in the detail panel below the port table (selected process info).
+/// Top-level section. Tab / Shift+Tab cycles between sections.
 ///
-/// These tabs only appear in the bottom split panel when `ViewMode::Table`
-/// is active and `show_details` is true.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DetailTab {
-    /// Process tree view.
-    Tree,
-    /// Network interface info.
-    Interface,
-    /// Connection details.
-    Connection,
+/// `Connections` is the default: port table + bottom Details panel.
+/// `Processes` shows the selected entry's process detail / topology.
+/// `Ssh` aggregates SSH hosts and active tunnels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ViewMode {
+    /// Connections: port table + Details panel.
+    #[default]
+    Connections,
+    /// Processes: Detail / Topology sub-tabs.
+    Processes,
+    /// SSH: Hosts / Tunnels sub-tabs.
+    Ssh,
 }
 
-impl DetailTab {
-    /// All tabs in display order.
-    pub const ALL: &[DetailTab] = &[DetailTab::Tree, DetailTab::Interface, DetailTab::Connection];
+impl ViewMode {
+    pub const ALL: &[ViewMode] = &[ViewMode::Connections, ViewMode::Processes, ViewMode::Ssh];
 
-    /// Position of this tab in [`Self::ALL`] (0-based).
-    pub fn index(self) -> usize {
+    fn index(self) -> usize {
         Self::ALL
             .iter()
-            .position(|&t| t == self)
-            .expect("all DetailTab variants must be listed in ALL")
+            .position(|&m| m == self)
+            .expect("all ViewMode variants must be listed in ALL")
     }
 
-    /// Cycle to the next tab (wraps around).
     pub fn next(self) -> Self {
         Self::ALL[(self.index() + 1) % Self::ALL.len()]
     }
 
-    /// Cycle to the previous tab (wraps around).
     pub fn prev(self) -> Self {
         Self::ALL[(self.index() + Self::ALL.len() - 1) % Self::ALL.len()]
     }
+}
 
-    /// One-based label used for the tab bar and key dispatch, e.g. `"1"`.
-    pub fn key_label(self) -> String {
-        (self.index() + 1).to_string()
+/// Sub-tab inside the Processes section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ProcessesTab {
+    #[default]
+    Detail,
+    Topology,
+}
+
+impl ProcessesTab {
+    pub const ALL: &[ProcessesTab] = &[ProcessesTab::Detail, ProcessesTab::Topology];
+
+    pub fn next(self) -> Self {
+        match self {
+            ProcessesTab::Detail => ProcessesTab::Topology,
+            ProcessesTab::Topology => ProcessesTab::Detail,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        self.next()
     }
 }
 
-/// Main view mode — what occupies the primary screen area.
+/// Action that can be invoked on the currently selected entry.
 ///
-/// `Table` is the default: shows the port table (+ optional bottom detail panel).
-/// Other modes are fullscreen and replace the table entirely.
-/// Press `Esc` to return to `Table` from any other mode.
+/// Triggered via the Space-key contextual menu (and a small set of direct
+/// shortcuts: `K` for Kill, `c` for Copy).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActionItem {
+    Kill,
+    Copy,
+    CopyPid,
+    BlockIp,
+    Trace,
+    Forward,
+}
+
+/// Sub-tab inside the SSH section.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ViewMode {
-    /// Normal port table (default view).
+pub enum SshTab {
     #[default]
-    Table,
-    /// Fullscreen bar chart: connections per process.
-    Chart,
-    /// Fullscreen network topology: process → port → remote.
-    Topology,
-    /// Fullscreen process detail: cwd, env, files, CPU/RAM, connections.
-    ProcessDetail,
-    /// Fullscreen network namespace grouping (Linux only).
-    Namespaces,
-    /// Fullscreen list of saved SSH hosts (from `~/.ssh/config` + prt config).
-    SshHosts,
-    /// Fullscreen SSH tunnels manager.
+    Hosts,
     Tunnels,
+}
+
+impl SshTab {
+    pub const ALL: &[SshTab] = &[SshTab::Hosts, SshTab::Tunnels];
+
+    pub fn next(self) -> Self {
+        match self {
+            SshTab::Hosts => SshTab::Tunnels,
+            SshTab::Tunnels => SshTab::Hosts,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        self.next()
+    }
 }
 
 /// Output format for CLI export mode (`--export`).
@@ -386,78 +415,36 @@ mod tests {
         }
     }
 
-    // ── DetailTab cycling ─────────────────────────────────────────
+    #[test]
+    fn view_mode_default_is_connections() {
+        assert_eq!(ViewMode::default(), ViewMode::Connections);
+    }
 
     #[test]
-    fn detail_tab_next_cycles_forward() {
+    fn view_mode_next_prev_cycle() {
         let cases = [
-            (DetailTab::Tree, DetailTab::Interface),
-            (DetailTab::Interface, DetailTab::Connection),
-            (DetailTab::Connection, DetailTab::Tree),
+            (ViewMode::Connections, ViewMode::Processes),
+            (ViewMode::Processes, ViewMode::Ssh),
+            (ViewMode::Ssh, ViewMode::Connections),
         ];
         for (from, expected) in cases {
-            assert_eq!(from.next(), expected, "next of {:?}", from);
+            assert_eq!(from.next(), expected);
+            assert_eq!(expected.prev(), from);
         }
     }
 
     #[test]
-    fn detail_tab_prev_cycles_backward() {
-        let cases = [
-            (DetailTab::Tree, DetailTab::Connection),
-            (DetailTab::Interface, DetailTab::Tree),
-            (DetailTab::Connection, DetailTab::Interface),
-        ];
-        for (from, expected) in cases {
-            assert_eq!(from.prev(), expected, "prev of {:?}", from);
-        }
+    fn processes_tab_cycle() {
+        assert_eq!(ProcessesTab::Detail.next(), ProcessesTab::Topology);
+        assert_eq!(ProcessesTab::Topology.next(), ProcessesTab::Detail);
+        assert_eq!(ProcessesTab::default(), ProcessesTab::Detail);
     }
 
     #[test]
-    fn detail_tab_next_prev_roundtrip() {
-        for tab in DetailTab::ALL {
-            let tab = *tab;
-            assert_eq!(tab.next().prev(), tab, "roundtrip {:?}", tab);
-            assert_eq!(tab.prev().next(), tab, "reverse roundtrip {:?}", tab);
-        }
-    }
-
-    #[test]
-    fn detail_tab_all_contains_every_variant() {
-        let variant_count = {
-            let mut n = 0u8;
-            for tab in DetailTab::ALL {
-                match tab {
-                    DetailTab::Tree => n += 1,
-                    DetailTab::Interface => n += 1,
-                    DetailTab::Connection => n += 1,
-                }
-            }
-            n as usize
-        };
-        assert_eq!(
-            DetailTab::ALL.len(),
-            variant_count,
-            "ALL must list every DetailTab variant exactly once"
-        );
-    }
-
-    #[test]
-    fn detail_tab_index_matches_position() {
-        for (i, &tab) in DetailTab::ALL.iter().enumerate() {
-            assert_eq!(tab.index(), i, "index of {:?}", tab);
-        }
-    }
-
-    #[test]
-    fn detail_tab_key_label() {
-        assert_eq!(DetailTab::Tree.key_label(), "1");
-        assert_eq!(DetailTab::Interface.key_label(), "2");
-        assert_eq!(DetailTab::Connection.key_label(), "3");
-    }
-
-    #[test]
-    fn view_mode_default_is_table() {
-        assert_eq!(ViewMode::default(), ViewMode::Table);
+    fn ssh_tab_cycle() {
+        assert_eq!(SshTab::Hosts.next(), SshTab::Tunnels);
+        assert_eq!(SshTab::Tunnels.next(), SshTab::Hosts);
+        assert_eq!(SshTab::default(), SshTab::Hosts);
     }
 
     // ── SortState toggle table ────────────────────────────────────

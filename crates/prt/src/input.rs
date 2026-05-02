@@ -1,9 +1,18 @@
 use crate::app::App;
 use crossterm::event::{KeyCode, KeyEvent};
 use prt_core::i18n;
-use prt_core::model::{DetailTab, SortColumn, ViewMode};
+use prt_core::model::{ProcessesTab, SortColumn, SshTab, ViewMode};
+use std::time::{Duration, Instant};
+
+/// How long the "press Esc again" prompt stays armed.
+const ESC_ARM_WINDOW: Duration = Duration::from_millis(1500);
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
+    // Any non-Esc press disarms the cascade.
+    if key.code != KeyCode::Esc {
+        app.last_esc = None;
+    }
+
     if app.show_help {
         app.show_help = false;
         return;
@@ -104,27 +113,92 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
-    // Let SshHosts/Tunnels views consume their own navigation/action keys
-    // before generic handlers (so e.g. `s` in Tunnels means "save", not "sudo").
-    if app.view_mode == ViewMode::SshHosts && crate::views::ssh_hosts::handle_key(app, key) {
+    if crate::views::command_palette::handle_key(app, key) {
         return;
     }
-    if app.view_mode == ViewMode::Tunnels && crate::views::tunnels::handle_key(app, key) {
+
+    // Action menu overlay (highest priority after explicit forms/modals).
+    if crate::views::action_menu::handle_key(app, key) {
         return;
+    }
+
+    if let KeyCode::Char(':') = key.code {
+        crate::views::command_palette::open(app);
+        return;
+    }
+
+    // Space opens the action menu when nothing else is active.
+    if let KeyCode::Char(' ') = key.code {
+        crate::views::action_menu::open(app);
+        return;
+    }
+
+    // Section navigation: Tab / Shift+Tab cycles top-level sections.
+    match key.code {
+        KeyCode::Tab => {
+            app.view_mode = app.view_mode.next();
+            app.scroll_offset = 0;
+            return;
+        }
+        KeyCode::BackTab => {
+            app.view_mode = app.view_mode.prev();
+            app.scroll_offset = 0;
+            return;
+        }
+        _ => {}
+    }
+
+    // Sub-tab cycling: [ / ] inside Processes and SSH.
+    match (app.view_mode, key.code) {
+        (ViewMode::Processes, KeyCode::Char('[')) => {
+            app.processes_tab = app.processes_tab.prev();
+            app.scroll_offset = 0;
+            return;
+        }
+        (ViewMode::Processes, KeyCode::Char(']')) => {
+            app.processes_tab = app.processes_tab.next();
+            app.scroll_offset = 0;
+            return;
+        }
+        (ViewMode::Ssh, KeyCode::Char('[')) => {
+            app.ssh_tab = app.ssh_tab.prev();
+            return;
+        }
+        (ViewMode::Ssh, KeyCode::Char(']')) => {
+            app.ssh_tab = app.ssh_tab.next();
+            return;
+        }
+        _ => {}
+    }
+
+    // Inside SSH section, delegate to the active sub-view's handler so it can
+    // claim its own action keys (e.g. `s` = save in Tunnels, not sudo).
+    if app.view_mode == ViewMode::Ssh {
+        let consumed = match app.ssh_tab {
+            SshTab::Hosts => crate::views::ssh_hosts::handle_key(app, key),
+            SshTab::Tunnels => crate::views::tunnels::handle_key(app, key),
+        };
+        if consumed {
+            return;
+        }
     }
 
     match key.code {
         KeyCode::Char('q') => app.should_quit = true,
         KeyCode::Char('?') => app.show_help = true,
         KeyCode::Char('/') => app.filter_mode = true,
-        KeyCode::Esc => {
-            // Esc: return to Table from fullscreen views, or clear filter
-            if app.view_mode != ViewMode::Table {
-                app.view_mode = ViewMode::Table;
-                app.scroll_offset = 0;
-            } else if !app.filter.is_empty() {
+        // Cascade: only meaningful Esc action at top-level is clearing a
+        // non-empty filter. To prevent accidental loss, require two presses.
+        KeyCode::Esc if !app.filter.is_empty() => {
+            let armed = app.last_esc.is_some_and(|t| t.elapsed() < ESC_ARM_WINDOW);
+            if armed {
                 app.filter.clear();
                 app.update_filtered();
+                app.last_esc = None;
+            } else {
+                app.last_esc = Some(Instant::now());
+                let s = i18n::strings();
+                app.set_status(s.esc_again_to_clear_filter.into());
             }
         }
         KeyCode::Char('r') => {
@@ -136,15 +210,15 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.open_sudo_prompt(crate::app::SudoPurpose::Refresh);
         }
 
-        // Navigation (works in all view modes)
+        // Navigation
         KeyCode::Up | KeyCode::Char('k') => {
-            if app.view_mode == ViewMode::Table || app.view_mode == ViewMode::ProcessDetail {
+            if app.view_mode == ViewMode::Connections || app.view_mode == ViewMode::Processes {
                 app.selected = app.selected.saturating_sub(1);
             }
             app.scroll_offset = app.scroll_offset.saturating_sub(1);
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if app.view_mode == ViewMode::Table || app.view_mode == ViewMode::ProcessDetail {
+            if app.view_mode == ViewMode::Connections || app.view_mode == ViewMode::Processes {
                 app.selected = (app.selected + 1).min(app.filtered_indices.len().saturating_sub(1));
             }
             app.scroll_offset = app.scroll_offset.saturating_add(1);
@@ -155,91 +229,20 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
         KeyCode::End | KeyCode::Char('G') => {
             app.selected = app.filtered_indices.len().saturating_sub(1);
-            app.scroll_offset = u16::MAX; // will be clamped by rendering
+            app.scroll_offset = u16::MAX;
         }
 
-        // Toggle bottom detail panel (Table mode only)
-        KeyCode::Enter | KeyCode::Char('d') if app.view_mode == ViewMode::Table => {
+        KeyCode::Enter if app.view_mode == ViewMode::Connections => {
+            app.view_mode = ViewMode::Processes;
+            app.processes_tab = ProcessesTab::Detail;
+            app.scroll_offset = 0;
+        }
+
+        KeyCode::Char('d') if app.view_mode == ViewMode::Connections => {
             app.show_details = !app.show_details;
         }
 
-        // Keys 1-3: bottom panel tabs (in Table mode)
-        KeyCode::Char('1') if app.view_mode == ViewMode::Table => {
-            app.detail_tab = DetailTab::Tree;
-            app.show_details = true;
-        }
-        KeyCode::Char('2') if app.view_mode == ViewMode::Table => {
-            app.detail_tab = DetailTab::Interface;
-            app.show_details = true;
-        }
-        KeyCode::Char('3') if app.view_mode == ViewMode::Table => {
-            app.detail_tab = DetailTab::Connection;
-            app.show_details = true;
-        }
-
-        // Keys 4-7: toggle fullscreen views (press again = back to Table)
-        KeyCode::Char('4') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::Chart {
-                ViewMode::Table
-            } else {
-                ViewMode::Chart
-            };
-        }
-        KeyCode::Char('5') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::Topology {
-                ViewMode::Table
-            } else {
-                ViewMode::Topology
-            };
-        }
-        KeyCode::Char('6') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::ProcessDetail {
-                ViewMode::Table
-            } else {
-                ViewMode::ProcessDetail
-            };
-        }
-        KeyCode::Char('7') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::Namespaces {
-                ViewMode::Table
-            } else {
-                ViewMode::Namespaces
-            };
-        }
-        KeyCode::Char('8') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::SshHosts {
-                ViewMode::Table
-            } else {
-                ViewMode::SshHosts
-            };
-        }
-        KeyCode::Char('9') => {
-            app.scroll_offset = 0;
-            app.view_mode = if app.view_mode == ViewMode::Tunnels {
-                ViewMode::Table
-            } else {
-                ViewMode::Tunnels
-            };
-        }
-
-        // Left/Right: switch bottom panel tabs in Table mode
-        KeyCode::Right | KeyCode::Char('l')
-            if app.view_mode == ViewMode::Table && app.show_details =>
-        {
-            app.detail_tab = app.detail_tab.next();
-        }
-        KeyCode::Left | KeyCode::Char('h')
-            if app.view_mode == ViewMode::Table && app.show_details =>
-        {
-            app.detail_tab = app.detail_tab.prev();
-        }
-
-        // Kill
+        // Kill (always available, top-level shortcut)
         KeyCode::Char('K') | KeyCode::Delete => {
             if let Some(entry) = app.selected_entry() {
                 let pid = entry.entry.process.pid;
@@ -248,7 +251,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
         }
 
-        // Copy
+        // Copy (always available, top-level shortcut)
         KeyCode::Char('c') => {
             if let Some(entry) = app.selected_entry() {
                 let text = format!(
@@ -261,31 +264,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.copy_to_clipboard(&text);
             }
         }
-        KeyCode::Char('p') => {
-            if let Some(entry) = app.selected_entry() {
-                let text = entry.entry.process.pid.to_string();
-                app.copy_to_clipboard(&text);
-            }
-        }
 
-        // Firewall block
-        KeyCode::Char('b') => {
-            app.initiate_block();
-        }
-
-        // Strace attach/detach
-        KeyCode::Char('t') => {
-            app.toggle_tracer();
-        }
-
-        // SSH port forwarding
-        KeyCode::Char('F') if app.selected_entry().is_some() => {
-            app.forward_prompt = true;
-            app.forward_input.clear();
-        }
-
-        // Sort (Table mode)
-        KeyCode::Tab if app.view_mode == ViewMode::Table => {
+        // Sort (Connections only): o = next column, O = reverse direction.
+        KeyCode::Char('o') if app.view_mode == ViewMode::Connections => {
             let cols = [
                 SortColumn::Port,
                 SortColumn::Service,
@@ -303,9 +284,26 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.session.sort.toggle(cols[next]);
             app.refresh();
         }
-        KeyCode::BackTab if app.view_mode == ViewMode::Table => {
+        KeyCode::Char('O') if app.view_mode == ViewMode::Connections => {
             app.session.sort.ascending = !app.session.sort.ascending;
             app.refresh();
+        }
+
+        // Switch to Processes from Connections: ProcessesTab::Detail by default.
+        KeyCode::Char('P') => {
+            app.view_mode = ViewMode::Processes;
+            app.processes_tab = ProcessesTab::Detail;
+            app.scroll_offset = 0;
+        }
+
+        KeyCode::Char('p') => {
+            app.auto_refresh_paused = !app.auto_refresh_paused;
+            let s = i18n::strings();
+            app.set_status(if app.auto_refresh_paused {
+                s.paused.into()
+            } else {
+                s.resumed.into()
+            });
         }
 
         // Language
@@ -317,5 +315,52 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.set_status(format!("{} → {}", s.lang_switched, next.label()));
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyEvent, KeyModifiers};
+    use prt_core::model::ViewMode;
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn enter_in_connections_opens_process_detail() {
+        let mut app = App::new();
+        app.view_mode = ViewMode::Connections;
+        app.show_details = true;
+
+        handle_key(&mut app, key(KeyCode::Enter));
+
+        assert_eq!(app.view_mode, ViewMode::Processes);
+        assert!(app.show_details);
+    }
+
+    #[test]
+    fn d_in_connections_toggles_bottom_details_only() {
+        let mut app = App::new();
+        app.view_mode = ViewMode::Connections;
+        app.show_details = true;
+
+        handle_key(&mut app, key(KeyCode::Char('d')));
+
+        assert_eq!(app.view_mode, ViewMode::Connections);
+        assert!(!app.show_details);
+    }
+
+    #[test]
+    fn p_toggles_auto_refresh_pause() {
+        let mut app = App::new();
+        assert!(!app.auto_refresh_paused);
+
+        handle_key(&mut app, key(KeyCode::Char('p')));
+        assert!(app.auto_refresh_paused);
+
+        handle_key(&mut app, key(KeyCode::Char('p')));
+        assert!(!app.auto_refresh_paused);
     }
 }

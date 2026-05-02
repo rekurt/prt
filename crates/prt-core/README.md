@@ -21,7 +21,6 @@ Core library for [**prt**](https://crates.io/crates/prt) — a real-time network
 - **Firewall** — generate iptables/pfctl block/unblock commands
 - **Bandwidth** — system-wide RX/TX rate tracking
 - **Containers** — Docker/Podman container name resolution
-- **Namespaces** — Linux network namespace grouping
 - **Process detail** — CWD, environment, open files, CPU, RSS
 - **i18n** — runtime-switchable localization (English, Russian, Chinese) backed by `AtomicU8`
 - **Config** — TOML-based configuration from `~/.config/prt/`
@@ -88,7 +87,6 @@ for entry in &session.entries {
 | `core::suspicious` | Suspicious connection heuristics (3 rules) |
 | `core::bandwidth` | System-wide RX/TX rate (Linux: /proc/net/dev, macOS: netstat -ib) |
 | `core::container` | Docker/Podman resolution via batched CLI calls |
-| `core::namespace` | Linux network namespace grouping |
 | `core::process_detail` | CWD, env, open files, CPU %, RSS |
 | `core::firewall` | iptables/pfctl block/unblock command generation |
 | `core::killer` | SIGTERM / SIGKILL |

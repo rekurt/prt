@@ -29,7 +29,7 @@
 //!   [`DetailTab`](model::DetailTab), [`SortState`](model::SortState).
 //! - [`core`] — Business logic: scanning, diffing, filtering, sorting, killing,
 //!   session management, alerts, suspicious detection, bandwidth tracking,
-//!   container resolution, namespaces, process detail, firewall.
+//!   container resolution, process detail, firewall.
 //! - [`config`] — TOML configuration from `~/.config/prt/` (known port overrides, alert rules).
 //! - [`known_ports`] — Well-known port → service name database (~170 entries + user overrides).
 //! - [`i18n`] — Internationalization: runtime-switchable language support

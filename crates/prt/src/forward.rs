@@ -9,12 +9,22 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
+/// Lifecycle status of a tunnel, refreshed on each `cleanup()` tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TunnelStatus {
+    #[default]
+    Starting,
+    Alive,
+    Failed,
+}
+
 /// A single SSH tunnel: a running `ssh` child process plus the spec and
 /// resolved argument list (kept so `restart()` reuses the same resolution).
 pub struct SshTunnel {
     pub spec: SshTunnelSpec,
     args: Vec<String>,
     child: Child,
+    pub last_status: TunnelStatus,
 }
 
 impl SshTunnel {
@@ -24,7 +34,12 @@ impl SshTunnel {
         spec.validate()?;
         let args = spec.ssh_args();
         let child = spawn_ssh_args(&args)?;
-        Ok(Self { spec, args, child })
+        Ok(Self {
+            spec,
+            args,
+            child,
+            last_status: TunnelStatus::Starting,
+        })
     }
 
     /// Spawn an `ssh` process for `spec`. For aliases defined only in prt's
@@ -42,7 +57,12 @@ impl SshTunnel {
             _ => spec.ssh_args(),
         };
         let child = spawn_ssh_args(&args)?;
-        Ok(Self { spec, args, child })
+        Ok(Self {
+            spec,
+            args,
+            child,
+            last_status: TunnelStatus::Starting,
+        })
     }
 
     /// Backwards-compat shortcut: spawn a Local tunnel matching the legacy
@@ -64,9 +84,22 @@ impl SshTunnel {
         self.spec.summary()
     }
 
-    /// Check if the underlying ssh child is still alive.
-    pub fn is_alive(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(None))
+    /// Refresh `last_status` based on the child process state.
+    pub fn refresh_status(&mut self) -> TunnelStatus {
+        let new = match self.child.try_wait() {
+            Ok(None) => match self.last_status {
+                TunnelStatus::Starting => {
+                    // After surviving the 150ms spawn check + at least one tick,
+                    // promote to Alive.
+                    TunnelStatus::Alive
+                }
+                other => other,
+            },
+            Ok(Some(_)) => TunnelStatus::Failed,
+            Err(_) => TunnelStatus::Failed,
+        };
+        self.last_status = new;
+        new
     }
 
     /// Kill the tunnel (signal + reap).
@@ -79,6 +112,7 @@ impl SshTunnel {
     pub fn restart(&mut self) -> Result<(), String> {
         self.kill();
         self.child = spawn_ssh_args(&self.args)?;
+        self.last_status = TunnelStatus::Starting;
         Ok(())
     }
 }
@@ -168,9 +202,20 @@ impl ForwardManager {
         Ok(self.tunnels.len() - 1)
     }
 
-    /// Remove dead tunnels.
+    /// Refresh each tunnel's `last_status`. Dead tunnels remain in the list
+    /// (with `last_status = Failed`) so the user can see what happened and
+    /// either restart or remove them; previously they were silently dropped.
     pub fn cleanup(&mut self) {
-        self.tunnels.retain_mut(|t| t.is_alive());
+        for tunnel in &mut self.tunnels {
+            tunnel.refresh_status();
+        }
+    }
+
+    /// Drop tunnels that have already failed. Called when the user asks to
+    /// prune the list (e.g. via "save" which only persists running tunnels).
+    pub fn drop_failed(&mut self) {
+        self.tunnels
+            .retain(|t| t.last_status != TunnelStatus::Failed);
     }
 
     /// Kill the tunnel at `idx`. No-op if out of bounds.
@@ -179,6 +224,23 @@ impl ForwardManager {
             self.tunnels[idx].kill();
             self.tunnels.remove(idx);
         }
+    }
+
+    /// Replace the tunnel at `idx` with a fresh spec (kills + respawns).
+    /// Used by the form's edit-mode.
+    pub fn replace_at(
+        &mut self,
+        idx: usize,
+        spec: SshTunnelSpec,
+        host: Option<&SshHost>,
+    ) -> Result<(), String> {
+        if idx >= self.tunnels.len() {
+            return Err("no such tunnel".into());
+        }
+        let new_tunnel = SshTunnel::spawn_with_host(spec, host)?;
+        // Old tunnel is killed via Drop when replaced.
+        self.tunnels[idx] = new_tunnel;
+        Ok(())
     }
 
     /// Restart the tunnel at `idx`.

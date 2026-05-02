@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Build & Test Commands
 
@@ -20,7 +20,7 @@ Note: `cargo` may require `export PATH="$HOME/.cargo/bin:$PATH"` on this machine
 
 Network port monitor with TUI interface (ratatui) for macOS and Linux. Workspace with 2 crates:
 
-- **prt-core** — library: model, scanner, killer, platform abstraction, i18n, session, config, known ports, alerts, suspicious detection, bandwidth, containers, process detail, firewall
+- **prt-core** — library: model, scanner, killer, platform abstraction, i18n, session, config, known ports, alerts, suspicious detection, bandwidth, containers, namespaces, process detail, firewall
 - **prt** — TUI binary (ratatui + crossterm + clap) with stream/watch/tracer/forward modules
 
 **Data flow:** `platform::scan_ports()` → `Session::refresh()` → `scanner::diff_entries()` (tracks New/Unchanged/Gone with first_seen carry-forward) → enrich (service names, suspicious, containers) → retain (drop Gone after 5s) → `bandwidth.sample()` → `scanner::sort_entries()` → (in App::refresh) `alerts::evaluate()` → cache invalidation → `scanner::filter_indices()` → UI renders (ViewMode-based routing)
@@ -30,12 +30,12 @@ Network port monitor with TUI interface (ratatui) for macOS and Linux. Workspace
 - `PortEntry` is the core data type; `TrackedEntry` wraps it with status (New/Unchanged/Gone), timestamp, and enrichment fields (first_seen, suspicious, container_name, service_name)
 - Entry identity key is `(port, pid)` tuple — used in `diff_entries()` and focus stability (selection tracks by identity, not index)
 - `Session` struct encapsulates the refresh/diff/retain/sort cycle — shared logic that UI delegates to
-- `ViewMode` enum is the top-level section: `Connections` / `Processes` / `Ssh` (Tab/Shift+Tab cycles). `ProcessesTab` and `SshTab` enums drive sub-tabs (`[` / `]`). The bottom Details panel under Connections is a single unified view (no tabs). Discrete actions live in the `Space`-key `ActionItem` menu.
+- `ViewMode` enum controls fullscreen views (Table/Chart/Topology/ProcessDetail/Namespaces); `DetailTab` enum controls bottom panel tabs (Tree/Interface/Connection)
 - `ExportFormat` in core has no clap dependency; binary crate wraps it with `clap::ValueEnum`
 - Gone entries are retained for 5 seconds before removal; auto-refresh every 2 seconds
 - Config from `~/.config/prt/config.toml` — optional, missing file = defaults, parse error = stderr warning + defaults
 - Error handling: `anyhow::Result` throughout, UI shows errors as status messages
-- Caching: process detail data cached per-refresh (not per-frame) in App
+- Caching: process detail and namespace data cached per-refresh (not per-frame) in App
 
 **i18n system:** `prt-core/src/i18n/` — static `Strings` structs per language (en, ru, zh), `AtomicU8` for global state. Language set via `--lang` flag, `PRT_LANG` env, or auto-detected from system locale. Compile-time completeness check: adding a field to `Strings` forces all language files to be updated.
 

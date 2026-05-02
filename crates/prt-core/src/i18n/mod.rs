@@ -128,17 +128,19 @@ pub struct Strings {
     pub filter_label: &'static str,
     pub search_mode: &'static str,
 
-    // Detail tabs
-    pub tab_tree: &'static str,
-    pub tab_network: &'static str,
-    pub tab_connection: &'static str,
+    // Bottom Details panel
+    pub detail_panel_title: &'static str,
+    pub detail_panel_tree_header: &'static str,
     pub no_selected_process: &'static str,
 
-    // View mode labels (fullscreen views)
-    pub view_chart: &'static str,
+    // Top-level section labels
+    pub section_connections: &'static str,
+    pub section_processes: &'static str,
+    pub section_ssh: &'static str,
+
+    // Sub-view labels
     pub view_topology: &'static str,
     pub view_process: &'static str,
-    pub view_namespaces: &'static str,
 
     // Tree view
     pub process_not_found: &'static str,
@@ -170,6 +172,13 @@ pub struct Strings {
     pub scan_error: &'static str,
     pub cancelled: &'static str,
     pub lang_switched: &'static str,
+    pub paused: &'static str,
+    pub resumed: &'static str,
+    pub no_connections: &'static str,
+    pub no_filter_matches: &'static str,
+    pub more: &'static str,
+    pub col_age: &'static str,
+    pub col_remote: &'static str,
 
     // Sudo
     pub sudo_prompt_title: &'static str,
@@ -190,19 +199,36 @@ pub struct Strings {
     // Footer hints — context-specific
     pub hint_back: &'static str,
     pub hint_details: &'static str,
-    pub hint_views: &'static str,
     pub hint_sort: &'static str,
     pub hint_copy: &'static str,
-    pub hint_block: &'static str,
-    pub hint_trace: &'static str,
     pub hint_navigate: &'static str,
-    pub hint_tabs: &'static str,
+    pub hint_section_next: &'static str,
+    pub hint_subtab: &'static str,
+    pub hint_action_menu: &'static str,
+    pub hint_edit_tunnel: &'static str,
+    pub hint_pause: &'static str,
+    pub hint_resume: &'static str,
+
+    // Action menu
+    pub action_menu_title: &'static str,
+    pub action_kill: &'static str,
+    pub action_copy: &'static str,
+    pub action_copy_pid: &'static str,
+    pub action_block: &'static str,
+    pub action_trace: &'static str,
+    pub action_forward: &'static str,
+    pub action_unavailable_no_remote: &'static str,
+    pub command_palette_title: &'static str,
+    pub command_palette_empty: &'static str,
+
+    // Esc cascade hints
+    pub esc_again_to_clear_filter: &'static str,
+    pub esc_again_to_discard_form: &'static str,
 
     // Forward dialog
     pub forward_prompt_title: &'static str,
     pub forward_host_label: &'static str,
     pub forward_confirm_hint: &'static str,
-    pub hint_forward: &'static str,
 
     // SSH hosts / tunnels views
     pub view_ssh_hosts: &'static str,
@@ -224,6 +250,10 @@ pub struct Strings {
     pub tunnel_col_status: &'static str,
     pub tunnel_status_alive: &'static str,
     pub tunnel_status_dead: &'static str,
+    pub tunnel_status_starting: &'static str,
+    pub tunnel_status_failed: &'static str,
+    pub tunnel_form_edit_title: &'static str,
+    pub tunnel_form_field_required: &'static str,
     pub tunnels_empty: &'static str,
     pub tunnels_saved: &'static str,
     pub tunnel_killed: &'static str,
@@ -243,8 +273,6 @@ pub struct Strings {
     pub tunnel_form_invalid: &'static str,
 
     // Footer hints — ssh views
-    pub hint_ssh_hosts: &'static str,
-    pub hint_tunnels: &'static str,
     pub hint_new_tunnel: &'static str,
     pub hint_kill_tunnel: &'static str,
     pub hint_restart_tunnel: &'static str,

@@ -9,15 +9,16 @@ pub static STRINGS: Strings = Strings {
     filter_label: "filter:",
     search_mode: "[SEARCH]",
 
-    tab_tree: "Tree",
-    tab_network: "Network",
-    tab_connection: "Connection",
+    detail_panel_title: "Details",
+    detail_panel_tree_header: "Process tree:",
     no_selected_process: " no process selected",
 
-    view_chart: "Chart",
+    section_connections: "Connections",
+    section_processes: "Processes",
+    section_ssh: "SSH",
+
     view_topology: "Topology",
     view_process: "Process",
-    view_namespaces: "Namespaces",
 
     process_not_found: "process not found",
 
@@ -38,42 +39,33 @@ pub static STRINGS: Strings = Strings {
     conn_cmdline: "  Cmdline:    ",
 
     help_text: r#"
-  Keys:
-  q            quit
+  Global:
   ?            this help
-  /            search / filter (! = suspicious only)
-  Esc          back to table / clear filter
+  q            quit
+  Tab / Sh+Tab next / previous section (Connections | Processes | SSH)
+  Space        action menu (Kill / Copy / Block / Trace / Forward)
+  :            command palette
+  /            search / filter   (Esc twice to clear)
+  p            pause / resume auto-refresh
   r            refresh
   s            enter sudo password
-
-  Navigation:
-  j/k Up/Down  move selection
-  g/G          jump to start / end
-
-  Bottom panel (Table mode):
-  Enter/d      show/hide detail panel
-  1/2/3        Tree / Network / Connection tab
-  Left/Right   switch detail tab
-  h/l          switch detail tab
-
-  Fullscreen views:
-  4            Chart (connections per process)
-  5            Topology (process -> port -> remote)
-  6            Process detail (info, files, env)
-  7            Namespaces (Linux only)
-
-  Actions:
-  K/Del        kill process
-  c            copy line to clipboard
-  p            copy PID to clipboard
-  b            block remote IP (firewall)
-  t            attach/detach strace
-  F            SSH port forward (tunnel)
-
-  Table:
-  Tab          next sort column
-  Shift+Tab    reverse sort direction
   L            switch language
+  K / Del      kill selected process
+  c            copy selected line to clipboard
+  j/k g/G      navigate / jump to start | end
+
+  Connections (default section):
+  Enter        open Process detail
+  d            show / hide bottom Details panel
+  o / O        next sort column / reverse direction
+
+  Processes:
+  [ / ]        switch sub-tab (Detail | Topology)
+
+  SSH:
+  [ / ]        switch sub-tab (Hosts | Tunnels)
+  Hosts        Enter = new tunnel from this host,  r = reload
+  Tunnels      n = new,  e = edit,  K = kill,  r = restart,  s = save
 "#,
 
     kill_cancel: "[y] SIGTERM  [f] SIGKILL  [n/Esc] cancel",
@@ -82,6 +74,13 @@ pub static STRINGS: Strings = Strings {
     clipboard_unavailable: "clipboard unavailable",
     scan_error: "scan error",
     cancelled: "cancelled",
+    paused: "auto-refresh paused",
+    resumed: "auto-refresh resumed",
+    no_connections: " no connections visible",
+    no_filter_matches: " no matches for filter",
+    more: "more",
+    col_age: "Age",
+    col_remote: "Remote",
 
     sudo_prompt_title: " Enter sudo password ",
     sudo_password_label: " Password: ",
@@ -99,18 +98,33 @@ pub static STRINGS: Strings = Strings {
 
     hint_back: "back",
     hint_details: "details",
-    hint_views: "views",
     hint_sort: "sort",
     hint_copy: "copy",
-    hint_block: "block IP",
-    hint_trace: "trace",
     hint_navigate: "navigate",
-    hint_tabs: "tabs",
+    hint_section_next: "section",
+    hint_subtab: "tab",
+    hint_action_menu: "actions",
+    hint_edit_tunnel: "edit",
+    hint_pause: "pause",
+    hint_resume: "resume",
+
+    action_menu_title: "Actions",
+    action_kill: "Kill process",
+    action_copy: "Copy line",
+    action_copy_pid: "Copy PID",
+    action_block: "Block remote IP",
+    action_trace: "Trace syscalls",
+    action_forward: "SSH forward",
+    action_unavailable_no_remote: "no remote address",
+    command_palette_title: "Command",
+    command_palette_empty: "no commands",
+
+    esc_again_to_clear_filter: "Esc again to clear filter",
+    esc_again_to_discard_form: "Esc again to discard changes",
 
     forward_prompt_title: " SSH Forward ",
     forward_host_label: " host:port → ",
     forward_confirm_hint: " [Enter] create  [Esc] cancel",
-    hint_forward: "forward",
 
     view_ssh_hosts: "SSH Hosts",
     view_tunnels: "Tunnels",
@@ -130,6 +144,10 @@ pub static STRINGS: Strings = Strings {
     tunnel_col_status: "Status",
     tunnel_status_alive: "alive",
     tunnel_status_dead: "dead",
+    tunnel_status_starting: "starting",
+    tunnel_status_failed: "failed",
+    tunnel_form_edit_title: " Edit SSH Tunnel ",
+    tunnel_form_field_required: "required",
     tunnels_empty: "  No active tunnels. Press [n] to create one.",
     tunnels_saved: "tunnels saved to config",
     tunnel_killed: "tunnel killed",
@@ -147,8 +165,6 @@ pub static STRINGS: Strings = Strings {
     tunnel_form_hint: " [Tab] next  [\u{2190}\u{2192}] kind  [Enter] create  [Esc] cancel",
     tunnel_form_invalid: "invalid tunnel form",
 
-    hint_ssh_hosts: "ssh hosts",
-    hint_tunnels: "tunnels",
     hint_new_tunnel: "new",
     hint_kill_tunnel: "kill",
     hint_restart_tunnel: "restart",
