@@ -91,6 +91,7 @@ pub static STRINGS: Strings = Strings {
 
     hint_help: "справка",
     hint_search: "поиск",
+    hint_filter_examples: "фильтры: status:new risk:high pid:1234 !",
     hint_kill: "завершить",
     hint_sudo: "sudo",
     hint_quit: "выход",

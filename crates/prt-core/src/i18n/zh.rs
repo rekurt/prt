@@ -91,6 +91,7 @@ pub static STRINGS: Strings = Strings {
 
     hint_help: "帮助",
     hint_search: "搜索",
+    hint_filter_examples: "筛选: status:new risk:high pid:1234 !",
     hint_kill: "终止",
     hint_sudo: "sudo",
     hint_quit: "退出",

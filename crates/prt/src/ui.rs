@@ -1109,6 +1109,17 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
             return;
         }
     }
+    if app.filter_mode {
+        let line = Line::from(vec![
+            Span::styled(" / ", Style::default().fg(Color::Black).bg(Color::Green)),
+            Span::styled(
+                format!(" {} ", s.hint_filter_examples),
+                Style::default().fg(Color::Green),
+            ),
+        ]);
+        f.render_widget(line, area);
+        return;
+    }
 
     let mut items: Vec<(&'static str, &'static str)> = vec![
         ("?", s.hint_help),

@@ -191,6 +191,7 @@ pub struct Strings {
     // Footer hints — common
     pub hint_help: &'static str,
     pub hint_search: &'static str,
+    pub hint_filter_examples: &'static str,
     pub hint_kill: &'static str,
     pub hint_sudo: &'static str,
     pub hint_quit: &'static str,
