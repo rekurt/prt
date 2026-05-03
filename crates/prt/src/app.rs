@@ -283,8 +283,16 @@ impl App {
         }
         // Evaluate alert rules
         self.active_alerts = alerts::evaluate(&self.session.config.alerts, &self.session.entries);
-        // Invalidate detail cache to pick up fresh data
-        self.detail_cache = None;
+        if let Some((pid, _)) = self.detail_cache.as_ref() {
+            if !self
+                .session
+                .entries
+                .iter()
+                .any(|entry| entry.entry.process.pid == *pid)
+            {
+                self.detail_cache = None;
+            }
+        }
         self.update_filtered();
     }
 
