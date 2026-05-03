@@ -2,16 +2,19 @@
 //!
 //! Resolves process PIDs to container names using:
 //! - **Linux:** `/proc/{pid}/cgroup` → container ID → `docker ps` lookup
-//! - **macOS:** `docker ps` with PID matching via `docker inspect`
+//! - **macOS/other:** skipped to keep the TUI startup and refresh path non-blocking
 //!
 //! All lookups are batched per refresh cycle to minimize CLI overhead.
 //! Missing Docker/Podman is handled gracefully (empty results, no errors).
 
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
 use std::process::Command;
+#[cfg(target_os = "linux")]
 use std::time::Duration;
 
 /// Timeout for docker CLI calls to avoid blocking the TUI.
+#[cfg(target_os = "linux")]
 const DOCKER_TIMEOUT_SECS: u64 = 2;
 
 /// Resolve container names for a batch of PIDs.
@@ -24,7 +27,17 @@ pub fn resolve_container_names(pids: &[u32]) -> HashMap<u32, String> {
         return HashMap::new();
     }
 
+    resolve_container_names_for_platform(pids)
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_container_names_for_platform(pids: &[u32]) -> HashMap<u32, String> {
     select_runtime_names(docker_resolve(pids), podman_resolve(pids))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn resolve_container_names_for_platform(_pids: &[u32]) -> HashMap<u32, String> {
+    HashMap::new()
 }
 
 /// Check if any entries have container names (used for adaptive column).
@@ -33,6 +46,7 @@ pub fn has_containers(names: &HashMap<u32, String>) -> bool {
 }
 
 /// Resolve via `docker ps` + `docker inspect`.
+#[cfg(target_os = "linux")]
 fn docker_resolve(pids: &[u32]) -> Option<HashMap<u32, String>> {
     let pid_set: std::collections::HashSet<u32> = pids.iter().copied().collect();
     // Get all running containers: ID and Name
@@ -77,6 +91,7 @@ fn docker_resolve(pids: &[u32]) -> Option<HashMap<u32, String>> {
 }
 
 /// Resolve via `podman ps` + `podman inspect`.
+#[cfg(target_os = "linux")]
 fn podman_resolve(pids: &[u32]) -> Option<HashMap<u32, String>> {
     let pid_set: std::collections::HashSet<u32> = pids.iter().copied().collect();
     let output = run_with_timeout(
@@ -119,6 +134,7 @@ fn podman_resolve(pids: &[u32]) -> Option<HashMap<u32, String>> {
 }
 
 /// Get the main PID of a container via `docker/podman inspect`.
+#[cfg(target_os = "linux")]
 fn get_container_pid(runtime: &str, container_id: &str) -> Option<u32> {
     let output = run_with_timeout(
         runtime,
@@ -129,6 +145,7 @@ fn get_container_pid(runtime: &str, container_id: &str) -> Option<u32> {
 
 /// Run a command with timeout, returning stdout as String.
 /// Returns None if command not found, timeout, or non-zero exit.
+#[cfg(target_os = "linux")]
 fn run_with_timeout(cmd: &str, args: &[&str]) -> Option<String> {
     let mut child = Command::new(cmd)
         .args(args)
@@ -167,6 +184,7 @@ fn run_with_timeout(cmd: &str, args: &[&str]) -> Option<String> {
     }
 }
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn select_runtime_names(
     docker_names: Option<HashMap<u32, String>>,
     podman_names: Option<HashMap<u32, String>>,
@@ -231,6 +249,13 @@ mod tests {
     #[test]
     fn resolve_empty_pids() {
         let result = resolve_container_names(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn resolve_non_linux_skips_external_runtime_calls() {
+        let result = resolve_container_names(&[1, 2, 3]);
         assert!(result.is_empty());
     }
 
