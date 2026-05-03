@@ -7,16 +7,17 @@ use crossterm::ExecutableCommand;
 use prt_core::config;
 use prt_core::core::alerts::{self, AlertAction, FiredAlert};
 use prt_core::core::firewall;
-use prt_core::core::namespace::NetNamespace;
 use prt_core::core::process_detail::ProcessDetail;
 use prt_core::core::ssh_config::{self, SshHost};
 use prt_core::core::ssh_tunnel::SshTunnelSpec;
-use prt_core::core::{killer, namespace, process_detail, session::Session};
+use prt_core::core::{killer, process_detail, session::Session};
 use prt_core::i18n;
-use prt_core::model::{DetailTab, EntryStatus, TrackedEntry, ViewMode, TICK_RATE};
+use prt_core::model::{ProcessesTab, SshTab, TrackedEntry, ViewMode, TICK_RATE};
 
 use crate::forward::ForwardManager;
 use crate::tracer::StraceSession;
+use crate::views::action_menu::ActionMenu;
+use crate::views::command_palette::CommandPalette;
 use crate::views::tunnel_form::TunnelFormState;
 use ratatui::prelude::*;
 use std::io::stdout;
@@ -39,9 +40,13 @@ pub struct App {
     pub filter_mode: bool,
     pub show_help: bool,
     pub show_details: bool,
-    pub detail_tab: DetailTab,
-    /// Main view mode: Table, Chart, Topology, ProcessDetail, Namespaces.
+    pub auto_refresh_paused: bool,
+    /// Top-level section.
     pub view_mode: ViewMode,
+    /// Sub-tab inside the Processes section.
+    pub processes_tab: ProcessesTab,
+    /// Sub-tab inside the SSH section.
+    pub ssh_tab: SshTab,
     pub confirm_kill: Option<(u32, String)>,
     pub sudo_prompt: bool,
     pub sudo_password: String,
@@ -62,9 +67,7 @@ pub struct App {
     pub tracer: Option<StraceSession>,
     /// Cached process detail (PID → detail). Refreshed on PID change or refresh.
     pub detail_cache: Option<(u32, ProcessDetail)>,
-    /// Cached namespace data. Refreshed each scan cycle.
-    pub namespace_cache: Vec<(NetNamespace, Vec<u32>)>,
-    /// Scroll offset for fullscreen views (Chart, Topology, Namespaces).
+    /// Scroll offset for fullscreen views (Topology).
     pub scroll_offset: u16,
     /// Saved SSH hosts (parsed from `~/.ssh/config` + prt config).
     pub ssh_hosts: Vec<SshHost>,
@@ -74,6 +77,12 @@ pub struct App {
     pub tunnels_selected: usize,
     /// Active "new tunnel" form, if any.
     pub tunnel_form: Option<TunnelFormState>,
+    /// Active action menu overlay (Space-key popup), if any.
+    pub action_menu: Option<ActionMenu>,
+    pub command_palette: Option<CommandPalette>,
+    /// Timestamp of the last Esc press; used to arm the cascade
+    /// (e.g. press Esc once to be warned, twice in <1.5s to clear filter).
+    pub last_esc: Option<Instant>,
 }
 
 impl App {
@@ -88,8 +97,10 @@ impl App {
             filter_mode: false,
             show_help: false,
             show_details: true,
-            detail_tab: DetailTab::Tree,
+            auto_refresh_paused: false,
             view_mode: ViewMode::default(),
+            processes_tab: ProcessesTab::default(),
+            ssh_tab: SshTab::default(),
             confirm_kill: None,
             sudo_prompt: false,
             sudo_password: String::new(),
@@ -103,12 +114,14 @@ impl App {
             forward_input: String::new(),
             tracer: None,
             detail_cache: None,
-            namespace_cache: Vec::new(),
             scroll_offset: 0,
             ssh_hosts,
             ssh_hosts_selected: 0,
             tunnels_selected: 0,
             tunnel_form: None,
+            action_menu: None,
+            command_palette: None,
+            last_esc: None,
         };
         app.autostart_tunnels();
         app
@@ -162,7 +175,29 @@ impl App {
 
     /// Open the new-tunnel form, optionally pre-filling the SSH host alias.
     pub fn open_tunnel_form(&mut self, prefill_alias: Option<String>) {
-        self.tunnel_form = Some(TunnelFormState::new(prefill_alias));
+        self.tunnel_form = Some(match prefill_alias {
+            Some(alias) => TunnelFormState::new_from_host(alias),
+            None => TunnelFormState::new(None),
+        });
+    }
+
+    /// Open the tunnel form pre-populated from an existing tunnel for editing.
+    /// On submit, the form will replace the tunnel at `idx` (kill + spawn).
+    pub fn open_tunnel_form_edit(&mut self, idx: usize) {
+        if let Some(tunnel) = self.forwards.tunnels.get(idx) {
+            self.tunnel_form = Some(TunnelFormState::edit(&tunnel.spec, idx));
+        }
+    }
+
+    /// Replace the tunnel at `idx` with a new spec (kill old, spawn new).
+    pub fn replace_tunnel(&mut self, idx: usize, spec: SshTunnelSpec) {
+        let summary = spec.summary();
+        let host = self.host_for_alias(&spec.host_alias).cloned();
+        let s = i18n::strings();
+        match self.forwards.replace_at(idx, spec, host.as_ref()) {
+            Ok(()) => self.set_status(format!("tunnel: {summary}")),
+            Err(e) => self.set_status(format!("{}: {e}", s.tunnel_create_failed)),
+        }
     }
 
     /// Spawn a tunnel from a fully-validated spec.
@@ -224,6 +259,7 @@ impl App {
     }
 
     /// Persist the current set of active tunnels to the user's config file.
+    /// Failed tunnels are pruned first so the on-disk config stays clean.
     pub fn save_tunnels(&mut self) {
         let path = match config::config_path() {
             Some(p) => p,
@@ -232,6 +268,7 @@ impl App {
                 return;
             }
         };
+        self.forwards.drop_failed();
         let specs = self.forwards.specs();
         let s = i18n::strings();
         match config::write_tunnels(&path, &specs) {
@@ -246,8 +283,6 @@ impl App {
         }
         // Evaluate alert rules
         self.active_alerts = alerts::evaluate(&self.session.config.alerts, &self.session.entries);
-        // Refresh caches
-        self.refresh_namespace_cache();
         // Invalidate detail cache to pick up fresh data
         self.detail_cache = None;
         self.update_filtered();
@@ -437,20 +472,6 @@ impl App {
         self.detail_cache.as_ref().map(|(_, d)| d)
     }
 
-    /// Refresh namespace cache (called once per refresh cycle, not per frame).
-    fn refresh_namespace_cache(&mut self) {
-        let pids: Vec<u32> = self
-            .session
-            .entries
-            .iter()
-            .filter(|e| e.status != EntryStatus::Gone)
-            .map(|e| e.entry.process.pid)
-            .collect();
-
-        let ns_map = namespace::resolve_namespaces(&pids);
-        self.namespace_cache = namespace::group_by_namespace(&ns_map);
-    }
-
     pub fn open_sudo_prompt(&mut self, purpose: SudoPurpose) {
         self.sudo_purpose = purpose;
         self.sudo_prompt = true;
@@ -499,8 +520,10 @@ pub fn run() -> Result<()> {
     app.refresh();
 
     loop {
-        // Populate detail cache if ProcessDetail view is visible (avoids per-frame fetch)
-        if app.view_mode == ViewMode::ProcessDetail {
+        // Populate detail cache when Processes/Detail view is visible (avoids per-frame fetch)
+        if app.view_mode == ViewMode::Processes
+            && app.processes_tab == prt_core::model::ProcessesTab::Detail
+        {
             app.get_process_detail();
         }
 
@@ -529,10 +552,12 @@ pub fn run() -> Result<()> {
         app.forwards.cleanup();
 
         if last_tick.elapsed() >= TICK_RATE {
-            app.refresh();
-            // Bell on alert (BEL char to terminal)
-            if app.should_bell() {
-                print!("\x07");
+            if !app.auto_refresh_paused {
+                app.refresh();
+                // Bell on alert (BEL char to terminal)
+                if app.should_bell() {
+                    print!("\x07");
+                }
             }
             last_tick = Instant::now();
         }

@@ -241,10 +241,6 @@ fn matches_field_query(e: &TrackedEntry, field: &str, value: &str) -> bool {
 ///
 /// Matches against: port number, process name, PID, protocol, state, user.
 /// All comparisons are case-insensitive.
-fn matches_query(e: &TrackedEntry, q: &str) -> bool {
-    q.split_whitespace().all(|term| matches_term(e, term))
-}
-
 fn matches_plain_query(e: &TrackedEntry, q: &str) -> bool {
     e.entry.local_port().to_string().contains(q)
         || e.entry.process.name.to_lowercase().contains(q)
@@ -263,6 +259,17 @@ fn matches_plain_query(e: &TrackedEntry, q: &str) -> bool {
             .unwrap_or("")
             .to_lowercase()
             .contains(q)
+        || e.entry
+            .remote_addr
+            .map(|a| a.to_string())
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains(q)
+        || e.container_name
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains(q)
 }
 
 /// Filter entries by query string, returning matching entries.
@@ -273,7 +280,11 @@ pub fn filter_entries<'a>(entries: &'a [TrackedEntry], query: &str) -> Vec<&'a T
         return entries.iter().collect();
     }
     let q = query.to_lowercase();
-    entries.iter().filter(|e| matches_query(e, &q)).collect()
+    let terms: Vec<&str> = q.split_whitespace().collect();
+    entries
+        .iter()
+        .filter(|e| terms.iter().all(|term| matches_term(e, term)))
+        .collect()
 }
 
 /// Filter entries by query, returning indices into the original slice.
@@ -283,10 +294,11 @@ pub fn filter_indices(entries: &[TrackedEntry], query: &str) -> Vec<usize> {
         return (0..entries.len()).collect();
     }
     let q = query.to_lowercase();
+    let terms: Vec<&str> = q.split_whitespace().collect();
     entries
         .iter()
         .enumerate()
-        .filter(|(_, e)| matches_query(e, &q))
+        .filter(|(_, e)| terms.iter().all(|term| matches_term(e, term)))
         .map(|(i, _)| i)
         .collect()
 }

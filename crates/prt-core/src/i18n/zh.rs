@@ -9,15 +9,16 @@ pub static STRINGS: Strings = Strings {
     filter_label: "过滤:",
     search_mode: "[搜索]",
 
-    tab_tree: "进程树",
-    tab_network: "网络",
-    tab_connection: "连接",
+    detail_panel_title: "详情",
+    detail_panel_tree_header: "进程树:",
     no_selected_process: " 未选择进程",
 
-    view_chart: "图表",
+    section_connections: "连接",
+    section_processes: "进程",
+    section_ssh: "SSH",
+
     view_topology: "拓扑",
     view_process: "进程详情",
-    view_namespaces: "命名空间",
 
     process_not_found: "未找到进程",
 
@@ -38,42 +39,33 @@ pub static STRINGS: Strings = Strings {
     conn_cmdline: "  命令行:     ",
 
     help_text: r#"
-  快捷键:
-  q            退出
+  全局:
   ?            帮助
-  /            搜索 / 过滤 (! = 可疑连接)
-  Esc          返回表格 / 清除过滤
+  q            退出
+  Tab / Sh+Tab 下 / 上 一个分区 (连接 | 进程 | SSH)
+  Space        操作菜单 (终止 / 复制 / 封锁 / 跟踪 / 转发)
+  :            命令面板
+  /            搜索 / 过滤   (Esc 两次清除)
+  p            暂停 / 恢复自动刷新
   r            刷新
-  s            输入sudo密码
-
-  导航:
-  j/k 上/下    移动选择
-  g/G          跳到开头 / 结尾
-
-  底部面板 (表格模式):
-  Enter/d      显示/隐藏详情面板
-  1/2/3        进程树 / 网络 / 连接
-  左/右        切换标签页
-  h/l          切换标签页
-
-  全屏模式:
-  4            图表 (每进程连接数)
-  5            拓扑 (进程 → 端口 → 远程)
-  6            进程详情 (信息、文件、环境变量)
-  7            命名空间 (仅Linux)
-
-  操作:
-  K/Del        终止进程
-  c            复制行到剪贴板
-  p            复制PID到剪贴板
-  b            封锁远程IP (防火墙)
-  t            附加/分离 strace
-  F            SSH端口转发 (隧道)
-
-  表格:
-  Tab          下一排序列
-  Shift+Tab    反转排序方向
+  s            输入 sudo 密码
   L            切换语言
+  K / Del      终止选中的进程
+  c            复制行到剪贴板
+  j/k g/G      导航 / 跳到开头 | 结尾
+
+  连接 (默认分区):
+  Enter        打开进程详情
+  d            显示/隐藏底部详情面板
+  o / O        下一排序列 / 反转方向
+
+  进程:
+  [ / ]        切换子标签 (详情 | 拓扑)
+
+  SSH:
+  [ / ]        切换子标签 (主机 | 隧道)
+  主机         Enter = 从该主机新建隧道,  r = 重新加载
+  隧道         n = 新建,  e = 编辑,  K = 终止,  r = 重启,  s = 保存
 "#,
 
     kill_cancel: "[y] SIGTERM  [f] SIGKILL  [n/Esc] 取消",
@@ -82,6 +74,13 @@ pub static STRINGS: Strings = Strings {
     clipboard_unavailable: "剪贴板不可用",
     scan_error: "扫描错误",
     cancelled: "已取消",
+    paused: "自动刷新已暂停",
+    resumed: "自动刷新已恢复",
+    no_connections: " 无可见连接",
+    no_filter_matches: " 过滤无匹配",
+    more: "更多",
+    col_age: "时长",
+    col_remote: "远程",
 
     sudo_prompt_title: " 输入sudo密码 ",
     sudo_password_label: " 密码: ",
@@ -92,6 +91,7 @@ pub static STRINGS: Strings = Strings {
 
     hint_help: "帮助",
     hint_search: "搜索",
+    hint_filter_examples: "筛选: status:new risk:high pid:1234 !",
     hint_kill: "终止",
     hint_sudo: "sudo",
     hint_quit: "退出",
@@ -99,18 +99,33 @@ pub static STRINGS: Strings = Strings {
 
     hint_back: "返回",
     hint_details: "详情",
-    hint_views: "视图",
     hint_sort: "排序",
     hint_copy: "复制",
-    hint_block: "封锁IP",
-    hint_trace: "跟踪",
     hint_navigate: "导航",
-    hint_tabs: "标签",
+    hint_section_next: "分区",
+    hint_subtab: "标签",
+    hint_action_menu: "操作",
+    hint_edit_tunnel: "编辑",
+    hint_pause: "暂停",
+    hint_resume: "继续",
+
+    action_menu_title: "操作",
+    action_kill: "终止进程",
+    action_copy: "复制行",
+    action_copy_pid: "复制 PID",
+    action_block: "封锁远程 IP",
+    action_trace: "跟踪系统调用",
+    action_forward: "SSH 转发",
+    action_unavailable_no_remote: "无远程地址",
+    command_palette_title: "命令",
+    command_palette_empty: "无命令",
+
+    esc_again_to_clear_filter: "再按 Esc 清除过滤",
+    esc_again_to_discard_form: "再按 Esc 放弃更改",
 
     forward_prompt_title: " SSH隧道 ",
     forward_host_label: " 主机:端口 → ",
     forward_confirm_hint: " [Enter] 创建  [Esc] 取消",
-    hint_forward: "转发",
 
     view_ssh_hosts: "SSH 主机",
     view_tunnels: "隧道",
@@ -129,6 +144,10 @@ pub static STRINGS: Strings = Strings {
     tunnel_col_status: "状态",
     tunnel_status_alive: "活跃",
     tunnel_status_dead: "已断",
+    tunnel_status_starting: "启动中",
+    tunnel_status_failed: "失败",
+    tunnel_form_edit_title: " 编辑 SSH 隧道 ",
+    tunnel_form_field_required: "必填",
     tunnels_empty: "  无活跃隧道。按 [n] 创建。",
     tunnels_saved: "隧道已保存到配置",
     tunnel_killed: "隧道已终止",
@@ -146,8 +165,6 @@ pub static STRINGS: Strings = Strings {
     tunnel_form_hint: " [Tab] 下一项  [\u{2190}\u{2192}] 类型  [Enter] 创建  [Esc] 取消",
     tunnel_form_invalid: "隧道字段无效",
 
-    hint_ssh_hosts: "SSH 主机",
-    hint_tunnels: "隧道",
     hint_new_tunnel: "新建",
     hint_kill_tunnel: "终止",
     hint_restart_tunnel: "重启",

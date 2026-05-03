@@ -9,15 +9,16 @@ pub static STRINGS: Strings = Strings {
     filter_label: "фильтр:",
     search_mode: "[ПОИСК]",
 
-    tab_tree: "Дерево",
-    tab_network: "Сеть",
-    tab_connection: "Соединение",
+    detail_panel_title: "Детали",
+    detail_panel_tree_header: "Дерево процессов:",
     no_selected_process: " нет выбранного процесса",
 
-    view_chart: "График",
+    section_connections: "Соединения",
+    section_processes: "Процессы",
+    section_ssh: "SSH",
+
     view_topology: "Топология",
     view_process: "Процесс",
-    view_namespaces: "Namespaces",
 
     process_not_found: "процесс не найден",
 
@@ -38,42 +39,33 @@ pub static STRINGS: Strings = Strings {
     conn_cmdline: "  Cmdline:    ",
 
     help_text: r#"
-  Клавиши:
-  q            выход
+  Общие:
   ?            эта справка
-  /            поиск / фильтр (! = подозрительные)
-  Esc          назад к таблице / сбросить фильтр
+  q            выход
+  Tab / Sh+Tab след. / предыд. раздел (Соединения | Процессы | SSH)
+  Space        меню действий (Убить / Копир. / Блок / Трасс. / Туннель)
+  :            палитра команд
+  /            поиск / фильтр   (Esc дважды — стереть)
+  p            пауза / продолжить автообновление
   r            обновить
-  s            ввести sudo пароль
-
-  Навигация:
-  j/k ↑/↓     перемещение выбора
-  g/G          в начало / в конец
-
-  Нижняя панель (режим таблицы):
-  Enter/d      показать/скрыть панель деталей
-  1/2/3        Дерево / Сеть / Соединение
-  ←/→          переключение вкладок
-  h/l          переключение вкладок
-
-  Полноэкранные режимы:
-  4            График (соединения по процессам)
-  5            Топология (процесс → порт → удалённый)
-  6            Детали процесса (инфо, файлы, env)
-  7            Namespaces (только Linux)
-
-  Действия:
-  K/Del        завершить процесс
+  s            ввести sudo-пароль
+  L            сменить язык
+  K / Del      убить выделенный процесс
   c            копировать строку в буфер
-  p            копировать PID в буфер
-  b            блокировать IP (firewall)
-  t            подключить/отключить strace
-  F            SSH проброс порта (туннель)
+  j/k g/G      навигация / в начало | в конец
 
-  Таблица:
-  Tab          следующая колонка сортировки
-  Shift+Tab    изменить направление сортировки
-  L            переключить язык
+  Соединения (раздел по умолчанию):
+  Enter        открыть детали процесса
+  d            показать/скрыть панель Деталей
+  o / O        след. колонка сорт. / реверс направления
+
+  Процессы:
+  [ / ]        переключить вкладку (Детали | Топология)
+
+  SSH:
+  [ / ]        переключить вкладку (Хосты | Туннели)
+  Хосты        Enter = новый туннель от хоста,  r = перезагрузить
+  Туннели      n = новый,  e = правка,  K = убить,  r = рестарт,  s = сохранить
 "#,
 
     kill_cancel: "[y] SIGTERM  [f] SIGKILL  [n/Esc] отмена",
@@ -82,6 +74,13 @@ pub static STRINGS: Strings = Strings {
     clipboard_unavailable: "буфер недоступен",
     scan_error: "ошибка сканирования",
     cancelled: "отменено",
+    paused: "автообновление на паузе",
+    resumed: "автообновление включено",
+    no_connections: " нет видимых соединений",
+    no_filter_matches: " нет совпадений по фильтру",
+    more: "ещё",
+    col_age: "Возраст",
+    col_remote: "Удалённый",
 
     sudo_prompt_title: " Введите пароль sudo ",
     sudo_password_label: " Пароль: ",
@@ -92,6 +91,7 @@ pub static STRINGS: Strings = Strings {
 
     hint_help: "справка",
     hint_search: "поиск",
+    hint_filter_examples: "фильтры: status:new risk:high pid:1234 !",
     hint_kill: "завершить",
     hint_sudo: "sudo",
     hint_quit: "выход",
@@ -99,18 +99,33 @@ pub static STRINGS: Strings = Strings {
 
     hint_back: "назад",
     hint_details: "детали",
-    hint_views: "режимы",
     hint_sort: "сорт.",
     hint_copy: "копир.",
-    hint_block: "блок. IP",
-    hint_trace: "трасс.",
     hint_navigate: "навиг.",
-    hint_tabs: "вкладки",
+    hint_section_next: "раздел",
+    hint_subtab: "вкладка",
+    hint_action_menu: "действия",
+    hint_edit_tunnel: "правка",
+    hint_pause: "пауза",
+    hint_resume: "продолж.",
+
+    action_menu_title: "Действия",
+    action_kill: "Убить процесс",
+    action_copy: "Копировать строку",
+    action_copy_pid: "Копировать PID",
+    action_block: "Блокировать IP",
+    action_trace: "Трассировать syscalls",
+    action_forward: "SSH-туннель",
+    action_unavailable_no_remote: "нет удалённого адреса",
+    command_palette_title: "Команда",
+    command_palette_empty: "команд нет",
+
+    esc_again_to_clear_filter: "Esc ещё раз — стереть фильтр",
+    esc_again_to_discard_form: "Esc ещё раз — отменить изменения",
 
     forward_prompt_title: " SSH-туннель ",
     forward_host_label: " хост:порт → ",
     forward_confirm_hint: " [Enter] создать  [Esc] отмена",
-    hint_forward: "туннель",
 
     view_ssh_hosts: "SSH хосты",
     view_tunnels: "Туннели",
@@ -130,6 +145,10 @@ pub static STRINGS: Strings = Strings {
     tunnel_col_status: "Статус",
     tunnel_status_alive: "активен",
     tunnel_status_dead: "мёртв",
+    tunnel_status_starting: "запускается",
+    tunnel_status_failed: "сбой",
+    tunnel_form_edit_title: " Правка SSH-туннеля ",
+    tunnel_form_field_required: "обязательно",
     tunnels_empty: "  Активных туннелей нет. Нажмите [n] чтобы создать.",
     tunnels_saved: "туннели сохранены в конфиг",
     tunnel_killed: "туннель убит",
@@ -147,8 +166,6 @@ pub static STRINGS: Strings = Strings {
     tunnel_form_hint: " [Tab] след.  [\u{2190}\u{2192}] тип  [Enter] создать  [Esc] отмена",
     tunnel_form_invalid: "неверные поля туннеля",
 
-    hint_ssh_hosts: "SSH хосты",
-    hint_tunnels: "туннели",
     hint_new_tunnel: "новый",
     hint_kill_tunnel: "убить",
     hint_restart_tunnel: "рестарт",

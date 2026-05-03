@@ -106,19 +106,23 @@ The header bar shows system-wide network throughput: `▼ 1.2 MB/s ▲ 340 KB/s`
 
 Press `Enter` or `d` to open the detail panel, then `1` to see the full parent chain for the selected process (e.g., `launchd → nginx → worker`). Built by traversing PPID relationships.
 
-### Detail Panel Tabs
+### Sections
 
-The bottom panel (toggle with `Enter`/`d`) has three tabs:
+`Tab` / `Shift+Tab` cycles between three top-level sections. The active
+section is highlighted in the header.
 
-| Tab | Key | Content |
-|-----|-----|---------|
-| **Tree** | `1` | Process parent chain |
-| **Network** | `2` | Interface details, IP addresses, MTU |
-| **Connection** | `3` | All connections for the selected PID |
+| Section | Default content | Sub-tabs (`[` / `]`) |
+|---------|-----------------|----------------------|
+| **Connections** | Port table + bottom Details panel (toggle with `Enter` / `d`) | — |
+| **Processes** | Selected entry's process detail (CWD, CPU %, RSS, open files, env, all connections, process tree) | Detail ⇄ Topology |
+| **SSH** | Saved hosts and active tunnels in one place | Hosts ⇄ Tunnels |
 
-### Fullscreen Views
+The **Details** panel under the Connections table is a single unified view
+combining bind type, interface, remote address, state, cmdline, related
+ports, and the process tree — no tab switching needed.
 
-Four dedicated views accessible with keys `4`-`7`:
+The **Topology** sub-tab in Processes draws an ASCII tree
+`process → :local_port → remote` for the whole working set.
 
 | View | Key | Description |
 |------|-----|-------------|
@@ -127,36 +131,39 @@ Four dedicated views accessible with keys `4`-`7`:
 | **Process Detail** | `6` | Comprehensive info page: CWD, CPU %, RSS, open files, environment variables, all connections, network interfaces, process tree |
 | **Namespaces** | `7` | Network namespace grouping (Linux only). Shows named namespaces from `/run/netns/` or raw inode numbers |
 
-All fullscreen views support scrolling with `j`/`k` and `g`/`G`. Press `Esc` to return to the table.
+### Action menu (`Space`)
 
-### Firewall Quick-Block
+Almost every action on the selected entry is reached through one
+contextual popup, opened with `Space`:
 
-Press `b` on a connection with a remote address to block that IP. A confirmation dialog shows the exact command that will be executed:
+- **Kill process** (also bound to `K` directly)
+- **Copy line** (also bound to `c` directly) / **Copy PID**
+- **Block remote IP** — `iptables -A INPUT -s <IP> -j DROP` (Linux) /
+  `pfctl -t prt_blocked -T add <IP>` (macOS). Status bar shows the undo
+  command. Requires sudo.
+- **Trace syscalls** — `strace -p <PID> -e trace=network -f` (Linux) or
+  `dtruss -p <PID>` (macOS, needs SIP disabled or root). Re-run to detach.
+- **SSH forward** — opens the tunnel form so you can pick local port,
+  remote target, and host alias.
 
-- **Linux:** `iptables -A INPUT -s <IP> -j DROP`
-- **macOS:** `pfctl -t prt_blocked -T add <IP>`
+The menu only shows actions that are valid for the current entry — Block
+and Forward are hidden when there's no remote address.
 
-The status bar shows the undo command after blocking. Requires sudo privileges.
+### SSH section
 
-### Strace / Dtruss Attach
+`SSH` aggregates two sub-tabs:
 
-Press `t` to attach a system call tracer to the selected process. The detail panel splits to show a live stream of network-related syscalls:
+- **Hosts** — read-only list parsed from `~/.ssh/config` plus
+  `[[ssh_hosts]]` entries in `~/.config/prt/config.toml`. Press `Enter`
+  to open the tunnel form pre-filled with the host alias.
+- **Tunnels** — running tunnels with live status: 🟢 alive, 🟡 starting,
+  🔴 failed (failures stay visible until you act on them).
+  Keys: `n` new · `e` edit · `K` kill · `r` restart · `s` save to config.
 
-- **Linux:** `strace -p <PID> -e trace=network -f`
-- **macOS:** `dtruss -p <PID>` (requires SIP disabled or root)
-
-Press `t` again to detach. The tracer process is automatically killed on exit.
-
-### SSH Port Forwarding
-
-Press `F` (Shift+F) to create an SSH tunnel for the selected port. A dialog prompts for the remote host:
-
-```
-localhost:5432 →
-host:port → user@server.io:5432█
-```
-
-The tunnel is created via `ssh -N -L <local>:localhost:<remote> <host>`. Active tunnels are shown in the header bar (`⇄ localhost:5432 → server:22`). Tunnels are health-checked each tick and automatically killed on exit via `Drop`.
+The tunnel form does **inline validation** (bad fields turn red as you
+type), supports **edit-mode** (Enter replaces the existing tunnel), and
+**guards Esc** — discarding a non-empty form requires a second Esc
+within 1.5 seconds.
 
 ### Alert Rules
 
@@ -254,47 +261,53 @@ sudo prt                # run as root (see all processes)
 
 **Navigation:**
 
+**Global:**
+
 | Key | Action |
 |-----|--------|
-| `j`/`k` `↑`/`↓` | Move selection / scroll |
-| `g` / `G` | Jump to top / bottom |
-| `/` | Search & filter (`!` = suspicious only) |
-| `Esc` | Back to table / clear filter |
+| `?` | Help (cheat sheet) |
 | `q` | Quit |
-
-**Bottom panel (Table mode):**
-
-| Key | Action |
-|-----|--------|
-| `Enter` / `d` | Toggle detail panel |
-| `1` `2` `3` | Tree / Network / Connection tab |
-| `←`/`→` `h`/`l` | Switch detail tab |
-
-**Fullscreen views:**
-
-| Key | Action |
-|-----|--------|
-| `4` | Chart — connections per process |
-| `5` | Topology — process → port → remote |
-| `6` | Process detail — info, files, env |
-| `7` | Namespaces (Linux only) |
-
-**Actions:**
-
-| Key | Action |
-|-----|--------|
-| `K` / `Del` | Kill process |
-| `c` | Copy line to clipboard |
-| `p` | Copy PID to clipboard |
-| `b` | Block remote IP (firewall) |
-| `t` | Attach/detach strace |
-| `F` | SSH port forward (tunnel) |
+| `Tab` / `Shift+Tab` | Next / previous section (Connections \| Processes \| SSH) |
+| `Space` | Action menu (Kill / Copy / Block / Trace / Forward) |
+| `/` | Search & filter (`!` = suspicious only) |
+| `Esc` | Close modal · twice to clear an active filter |
 | `r` | Refresh |
 | `s` | Sudo prompt |
-| `Tab` | Next sort column |
-| `Shift+Tab` | Reverse sort direction |
 | `L` | Cycle language |
-| `?` | Help |
+| `j`/`k` `↑`/`↓` `g`/`G` | Move / scroll · jump to top / bottom |
+
+**Direct shortcuts (any section):**
+
+| Key | Action |
+|-----|--------|
+| `K` / `Del` | Kill selected process |
+| `c` | Copy line to clipboard |
+
+**Connections section:**
+
+| Key | Action |
+|-----|--------|
+| `Enter` / `d` | Toggle bottom Details panel |
+| `o` / `O` | Next sort column / reverse direction |
+
+**Processes section:**
+
+| Key | Action |
+|-----|--------|
+| `[` / `]` | Switch sub-tab (Detail \| Topology) |
+
+**SSH section:**
+
+| Key | Action |
+|-----|--------|
+| `[` / `]` | Switch sub-tab (Hosts \| Tunnels) |
+| Hosts: `Enter` | New tunnel from selected host |
+| Hosts: `r` | Reload `~/.ssh/config` and prt config |
+| Tunnels: `n` | Open new-tunnel form |
+| Tunnels: `e` | Edit selected tunnel (kill + respawn on submit) |
+| Tunnels: `K` | Kill selected tunnel |
+| Tunnels: `r` | Restart selected tunnel |
+| Tunnels: `s` | Save active tunnels to config |
 
 ## Configuration
 
@@ -326,7 +339,7 @@ action = "bell"
 ```
 crates/
 ├── prt-core/                  # Core library (platform-independent)
-│   ├── model.rs               # PortEntry, TrackedEntry, ViewMode, DetailTab, enums
+│   ├── model.rs               # PortEntry, TrackedEntry, ViewMode, ProcessesTab, SshTab, ActionItem
 │   ├── config.rs              # TOML config loading (~/.config/prt/)
 │   ├── known_ports.rs         # Well-known port → service name database
 │   ├── core/
@@ -397,7 +410,7 @@ This provides a fast “observe → contain → inspect” workflow.
 
 ### 3) Container port exposure audit
 
-In container-heavy hosts, use **Topology** (`5`) and **Namespaces** (`7`) to spot
+In container-heavy hosts, switch to **Processes → Topology** (`Tab` to Processes, `]` to Topology) to spot
 unexpected exposure (e.g., debug ports, admin APIs, accidental public binds).
 
 ### 4) Runtime feature-flag verification

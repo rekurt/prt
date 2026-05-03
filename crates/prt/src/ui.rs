@@ -2,7 +2,7 @@ use crate::app::App;
 use prt_core::core::{bandwidth, process_detail, scanner};
 use prt_core::i18n;
 use prt_core::model::{
-    ConnectionState, DetailTab, EntryStatus, SortColumn, TrackedEntry, ViewMode,
+    ConnectionState, EntryStatus, ProcessesTab, SortColumn, SshTab, TrackedEntry, ViewMode,
 };
 use ratatui::prelude::*;
 use ratatui::widgets::*;
@@ -24,13 +24,9 @@ pub fn draw(f: &mut Frame, app: &App) {
         draw_help(f, chunks[1]);
     } else {
         match app.view_mode {
-            ViewMode::Table => draw_table_view(f, app, chunks[1]),
-            ViewMode::Chart => draw_chart_fullscreen(f, app, chunks[1]),
-            ViewMode::Topology => draw_topology_fullscreen(f, app, chunks[1]),
-            ViewMode::ProcessDetail => draw_process_detail_fullscreen(f, app, chunks[1]),
-            ViewMode::Namespaces => draw_namespaces_fullscreen(f, app, chunks[1]),
-            ViewMode::SshHosts => crate::views::ssh_hosts::draw(f, app, chunks[1]),
-            ViewMode::Tunnels => crate::views::tunnels::draw(f, app, chunks[1]),
+            ViewMode::Connections => draw_table_view(f, app, chunks[1]),
+            ViewMode::Processes => draw_processes_view(f, app, chunks[1]),
+            ViewMode::Ssh => draw_ssh_view(f, app, chunks[1]),
         }
     }
 
@@ -46,6 +42,12 @@ pub fn draw(f: &mut Frame, app: &App) {
     }
     if app.tunnel_form.is_some() {
         crate::views::tunnel_form::draw(f, app);
+    }
+    if app.action_menu.is_some() {
+        crate::views::action_menu::draw(f, app);
+    }
+    if app.command_palette.is_some() {
+        crate::views::command_palette::draw(f, app);
     }
 
     draw_footer(f, app, chunks[2]);
@@ -82,6 +84,20 @@ fn draw_table_view(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
+fn draw_processes_view(f: &mut Frame, app: &App, area: Rect) {
+    match app.processes_tab {
+        ProcessesTab::Detail => draw_process_detail_fullscreen(f, app, area),
+        ProcessesTab::Topology => draw_topology_fullscreen(f, app, area),
+    }
+}
+
+fn draw_ssh_view(f: &mut Frame, app: &App, area: Rect) {
+    match app.ssh_tab {
+        SshTab::Hosts => crate::views::ssh_hosts::draw(f, app, area),
+        SshTab::Tunnels => crate::views::tunnels::draw(f, app, area),
+    }
+}
+
 // ── Header ───────────────────────────────────────────────────────
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
@@ -92,8 +108,10 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Black).bg(Color::Cyan),
         ),
         Span::raw(format!(
-            " {} ",
-            s.fmt_connections(app.filtered_indices.len())
+            " {}/{} {} ",
+            app.filtered_indices.len(),
+            app.session.entries.len(),
+            s.connections
         )),
     ];
 
@@ -123,6 +141,20 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         ));
     }
 
+    if app.auto_refresh_paused {
+        parts.push(Span::styled(
+            " PAUSED ",
+            Style::default().fg(Color::Black).bg(Color::Yellow),
+        ));
+    }
+
+    if app.tracer.is_some() {
+        parts.push(Span::styled(
+            " TRACE ",
+            Style::default().fg(Color::Black).bg(Color::Magenta),
+        ));
+    }
+
     // Bandwidth indicator
     if let Some(rate) = &app.session.bandwidth.current_rate {
         parts.push(Span::styled(
@@ -146,28 +178,46 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         parts.push(Span::styled(label, Style::default().fg(Color::Cyan)));
     }
 
-    // View mode indicator (when not in Table)
-    if app.view_mode != ViewMode::Table {
-        let label = view_mode_label(app.view_mode);
+    // Section breadcrumb: [Connections | Processes | Ssh]  with active highlighted.
+    parts.push(Span::raw("  "));
+    for &mode in ViewMode::ALL {
+        let label = section_label(mode);
+        let style = if mode == app.view_mode {
+            Style::default().fg(Color::Black).bg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+        parts.push(Span::styled(format!(" {label} "), style));
+        parts.push(Span::raw(" "));
+    }
+    // Sub-tab indicator
+    let sub = match app.view_mode {
+        ViewMode::Connections => None,
+        ViewMode::Processes => Some(match app.processes_tab {
+            ProcessesTab::Detail => i18n::strings().view_process,
+            ProcessesTab::Topology => i18n::strings().view_topology,
+        }),
+        ViewMode::Ssh => Some(match app.ssh_tab {
+            SshTab::Hosts => i18n::strings().view_ssh_hosts,
+            SshTab::Tunnels => i18n::strings().view_tunnels,
+        }),
+    };
+    if let Some(sub) = sub {
         parts.push(Span::styled(
-            format!(" [{label}] "),
-            Style::default().fg(Color::Black).bg(Color::Yellow),
+            format!("[{sub}]"),
+            Style::default().fg(Color::Cyan),
         ));
     }
 
     f.render_widget(Line::from(parts), area);
 }
 
-fn view_mode_label(mode: ViewMode) -> &'static str {
+fn section_label(mode: ViewMode) -> &'static str {
     let s = i18n::strings();
     match mode {
-        ViewMode::Table => "",
-        ViewMode::Chart => s.view_chart,
-        ViewMode::Topology => s.view_topology,
-        ViewMode::ProcessDetail => s.view_process,
-        ViewMode::Namespaces => s.view_namespaces,
-        ViewMode::SshHosts => s.view_ssh_hosts,
-        ViewMode::Tunnels => s.view_tunnels,
+        ViewMode::Connections => s.section_connections,
+        ViewMode::Processes => s.section_processes,
+        ViewMode::Ssh => s.section_ssh,
     }
 }
 
@@ -236,10 +286,37 @@ fn show_container_column(width: u16, app: &App) -> bool {
             .any(|e| e.container_name.is_some())
 }
 
+fn show_age_column(width: u16) -> bool {
+    width > 100
+}
+
+fn show_remote_column(width: u16) -> bool {
+    width > 120
+}
+
+fn format_age(first_seen: Option<Instant>, now: Instant) -> String {
+    let Some(first_seen) = first_seen else {
+        return "-".into();
+    };
+    let secs = now.duration_since(first_seen).as_secs();
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else if secs < 86400 {
+        format!("{}h", secs / 3600)
+    } else {
+        format!("{}d", secs / 86400)
+    }
+}
+
 // ── Port table ───────────────────────────────────────────────────
 
 fn draw_table(f: &mut Frame, app: &App, area: Rect) {
+    let s = i18n::strings();
     let wide = show_service_column(area.width);
+    let show_age = show_age_column(area.width);
+    let show_remote = show_remote_column(area.width);
     let show_container = show_container_column(area.width, app);
 
     let mut header_cells = vec![Cell::from(format!(
@@ -268,6 +345,12 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
     if show_container {
         header_cells.push(Cell::from("Container"));
     }
+    if show_age {
+        header_cells.push(Cell::from(s.col_age));
+    }
+    if show_remote {
+        header_cells.push(Cell::from(s.col_remote));
+    }
 
     let header = Row::new(header_cells).style(
         Style::default()
@@ -276,6 +359,19 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
     );
 
     let now = Instant::now();
+    if app.filtered_indices.is_empty() {
+        let message = if app.filter.is_empty() {
+            s.no_connections.to_string()
+        } else {
+            format!("{}: {}", s.no_filter_matches, app.filter)
+        };
+        f.render_widget(
+            Paragraph::new(message).style(Style::default().fg(Color::DarkGray)),
+            area,
+        );
+        return;
+    }
+
     let rows: Vec<Row> = app
         .filtered_indices
         .iter()
@@ -309,6 +405,17 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
                     e.container_name.as_deref().unwrap_or("-").to_string(),
                 ));
             }
+            if show_age {
+                cells.push(Cell::from(format_age(e.first_seen, now)));
+            }
+            if show_remote {
+                cells.push(Cell::from(
+                    e.entry
+                        .remote_addr
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|| "-".into()),
+                ));
+            }
 
             Row::new(cells).style(style)
         })
@@ -328,6 +435,12 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
     if show_container {
         widths.push(Constraint::Length(15));
     }
+    if show_age {
+        widths.push(Constraint::Length(7));
+    }
+    if show_remote {
+        widths.push(Constraint::Length(24));
+    }
 
     let table = Table::new(rows, widths)
         .header(header)
@@ -342,98 +455,26 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
 // ── Bottom detail panel (Table mode only) ────────────────────────
 
 fn draw_detail_panel(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
-        .split(area);
-
-    draw_tab_bar(f, app, chunks[0]);
-
-    let block = Block::default().borders(Borders::ALL & !Borders::TOP);
-    let inner = block.inner(chunks[1]);
-    f.render_widget(block, chunks[1]);
-
-    match app.detail_tab {
-        DetailTab::Tree => draw_tab_tree(f, app, inner),
-        DetailTab::Interface => draw_tab_interface(f, app, inner),
-        DetailTab::Connection => draw_tab_connection(f, app, inner),
-    }
-}
-
-fn tab_label(tab: DetailTab) -> &'static str {
     let s = i18n::strings();
-    match tab {
-        DetailTab::Tree => s.tab_tree,
-        DetailTab::Interface => s.tab_network,
-        DetailTab::Connection => s.tab_connection,
-    }
-}
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" {} ", s.detail_panel_title))
+        .title_alignment(Alignment::Left)
+        .border_style(Style::default().fg(Color::DarkGray));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
 
-fn draw_tab_bar(f: &mut Frame, app: &App, area: Rect) {
-    let mut spans = vec![Span::raw("\u{250c}")];
-    for &tab in DetailTab::ALL {
-        let key = tab.key_label();
-        let label = tab_label(tab);
-        let active = tab == app.detail_tab;
-        let style = if active {
-            Style::default().fg(Color::Black).bg(Color::Cyan)
-        } else {
-            Style::default().fg(Color::DarkGray)
-        };
-        spans.push(Span::styled(format!(" {key}:{label} "), style));
-    }
-    spans.push(Span::styled(
-        "\u{2500}".repeat(
-            area.width
-                .saturating_sub(spans.iter().map(|s| s.width() as u16).sum::<u16>())
-                as usize,
-        ),
-        Style::default().fg(Color::DarkGray),
-    ));
-
-    f.render_widget(Line::from(spans), area);
-}
-
-// ── Detail tab: Tree ─────────────────────────────────────────────
-
-fn draw_tab_tree(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
     let entry = match app.selected_entry() {
         Some(e) => e,
         None => {
-            f.render_widget(Paragraph::new(s.no_selected_process), area);
-            return;
-        }
-    };
-
-    let tree_lines = scanner::build_process_tree(&app.session.entries, entry.entry.process.pid);
-    let lines: Vec<Line> = tree_lines
-        .iter()
-        .map(|l| Line::from(format!("  {l}")))
-        .collect();
-
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
-}
-
-// ── Detail tab: Interface ────────────────────────────────────────
-
-fn draw_tab_interface(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
-    let entry = match app.selected_entry() {
-        Some(e) => e,
-        None => {
-            f.render_widget(Paragraph::new(s.no_selected_process), area);
+            f.render_widget(Paragraph::new(s.no_selected_process), inner);
             return;
         }
     };
 
     let e = &entry.entry;
+    let p = &e.process;
     let iface = scanner::resolve_interface(&e.local_addr);
-    let ip_version = if e.local_addr.is_ipv4() {
-        "IPv4"
-    } else {
-        "IPv6"
-    };
     let bind_type = if e.local_addr.ip().is_loopback() {
         s.iface_localhost_only
     } else if e.local_addr.ip().is_unspecified() {
@@ -441,60 +482,23 @@ fn draw_tab_interface(f: &mut Frame, app: &App, area: Rect) {
     } else {
         s.iface_specific
     };
+    let remote = e
+        .remote_addr
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| "-".into());
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(vec![
-            Span::styled(s.iface_address, Style::default().fg(Color::Cyan)),
-            Span::raw(e.local_addr.to_string()),
+            Span::styled(s.conn_local, Style::default().fg(Color::Cyan)),
+            Span::raw(format!("{}  {}  ({})", e.local_addr, e.protocol, bind_type)),
         ]),
         Line::from(vec![
             Span::styled(s.iface_interface, Style::default().fg(Color::Cyan)),
             Span::raw(iface),
         ]),
         Line::from(vec![
-            Span::styled(s.iface_protocol, Style::default().fg(Color::Cyan)),
-            Span::raw(format!("{} / {}", e.protocol, ip_version)),
-        ]),
-        Line::from(vec![
-            Span::styled(s.iface_bind, Style::default().fg(Color::Cyan)),
-            Span::raw(bind_type),
-        ]),
-    ];
-
-    f.render_widget(Paragraph::new(lines), area);
-}
-
-// ── Detail tab: Connection ───────────────────────────────────────
-
-fn draw_tab_connection(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
-    let entry = match app.selected_entry() {
-        Some(e) => e,
-        None => {
-            f.render_widget(Paragraph::new(s.no_selected_process), area);
-            return;
-        }
-    };
-
-    let e = &entry.entry;
-    let p = &e.process;
-
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled(s.conn_local, Style::default().fg(Color::Cyan)),
-            Span::raw(e.local_addr.to_string()),
-        ]),
-        Line::from(vec![
             Span::styled(s.conn_remote, Style::default().fg(Color::Cyan)),
-            Span::raw(
-                e.remote_addr
-                    .map(|a| a.to_string())
-                    .unwrap_or_else(|| "-".into()),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(s.conn_state, Style::default().fg(Color::Cyan)),
-            Span::raw(e.state.to_string()),
+            Span::raw(format!("{}  [{}]", remote, e.state)),
         ]),
         Line::from(vec![
             Span::styled(s.conn_process, Style::default().fg(Color::Cyan)),
@@ -513,7 +517,6 @@ fn draw_tab_connection(f: &mut Frame, app: &App, area: Rect) {
             s.fmt_all_ports(conns.len()),
             Style::default().fg(Color::DarkGray),
         )));
-
         for conn in &conns {
             let c = &conn.entry;
             let arrow = c
@@ -530,67 +533,19 @@ fn draw_tab_connection(f: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
-}
-
-// ── Fullscreen: Chart (connections per process) ──────────────────
-
-fn draw_chart_fullscreen(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {} ", s.view_chart))
-        .title_alignment(Alignment::Left)
-        .border_style(Style::default().fg(Color::Cyan));
-
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
-    // Also render the table at top with selection, chart below
-    if app.session.entries.is_empty() {
-        f.render_widget(Paragraph::new(s.no_selected_process), inner);
-        return;
+    let tree_lines = scanner::build_process_tree(&app.session.entries, p.pid);
+    if !tree_lines.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            s.detail_panel_tree_header,
+            Style::default().fg(Color::DarkGray),
+        )));
+        for l in &tree_lines {
+            lines.push(Line::from(format!("  {l}")));
+        }
     }
 
-    // Group connections per process name
-    let counts: Vec<(String, usize)> = {
-        let mut map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-        for e in &app.session.entries {
-            if e.status != EntryStatus::Gone {
-                *map.entry(e.entry.process.name.clone()).or_insert(0) += 1;
-            }
-        }
-        let mut v: Vec<_> = map.into_iter().collect();
-        v.sort_by_key(|b| std::cmp::Reverse(b.1));
-        v
-    };
-    let max = counts.first().map(|c| c.1).unwrap_or(1).max(1);
-    let bar_width = inner.width.saturating_sub(25) as usize;
-
-    let lines: Vec<Line> = counts
-        .iter()
-        .map(|(name, count)| {
-            let bar_len = (*count as f64 / max as f64 * bar_width as f64).round() as usize;
-            let bar = "\u{2588}".repeat(bar_len);
-            let name_display = if name.len() > 14 {
-                format!("{:.14}", name)
-            } else {
-                format!("{:<14}", name)
-            };
-            Line::from(vec![
-                Span::styled(
-                    format!("  {name_display} "),
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::styled(bar, Style::default().fg(Color::Green)),
-                Span::raw(format!(" {count}")),
-            ])
-        })
-        .collect();
-
-    let max_scroll = (lines.len() as u16).saturating_sub(inner.height);
-    let scroll = app.scroll_offset.min(max_scroll);
-    f.render_widget(Paragraph::new(lines).scroll((scroll, 0)), inner);
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
 // ── Fullscreen: Topology (process → port → remote) ──────────────
@@ -902,79 +857,6 @@ fn draw_process_detail_fullscreen(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(right_lines), columns[1]);
 }
 
-// ── Fullscreen: Namespaces ───────────────────────────────────────
-
-fn draw_namespaces_fullscreen(f: &mut Frame, app: &App, area: Rect) {
-    let s = i18n::strings();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {} ", s.view_namespaces))
-        .title_alignment(Alignment::Left)
-        .border_style(Style::default().fg(Color::Cyan));
-
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
-    if !cfg!(target_os = "linux") {
-        f.render_widget(
-            Paragraph::new("  Network namespaces are only available on Linux"),
-            inner,
-        );
-        return;
-    }
-
-    if app.session.entries.is_empty() {
-        f.render_widget(Paragraph::new(s.no_selected_process), inner);
-        return;
-    }
-
-    if app.namespace_cache.is_empty() {
-        f.render_widget(
-            Paragraph::new("  No namespace information available (requires /proc access)"),
-            inner,
-        );
-        return;
-    }
-
-    let mut lines: Vec<Line> = Vec::new();
-    for (ns, group_pids) in &app.namespace_cache {
-        lines.push(Line::from(vec![Span::styled(
-            format!("  {} ({} processes)", ns.label(), group_pids.len()),
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )]));
-
-        for &pid in group_pids.iter().take(12) {
-            let name = app
-                .session
-                .entries
-                .iter()
-                .find(|e| e.entry.process.pid == pid)
-                .map(|e| e.entry.process.name.as_str())
-                .unwrap_or("?");
-            lines.push(Line::from(format!(
-                "    \u{251c}\u{2500} {name} (PID {pid})"
-            )));
-        }
-        if group_pids.len() > 12 {
-            lines.push(Line::from(Span::styled(
-                format!("    \u{2514}\u{2500} ... +{} more", group_pids.len() - 12),
-                Style::default().fg(Color::DarkGray),
-            )));
-        }
-    }
-
-    let max_scroll = (lines.len() as u16).saturating_sub(inner.height);
-    let scroll = app.scroll_offset.min(max_scroll);
-    f.render_widget(
-        Paragraph::new(lines)
-            .wrap(Wrap { trim: false })
-            .scroll((scroll, 0)),
-        inner,
-    );
-}
-
 // ── Tracer panel (strace split) ──────────────────────────────────
 
 fn draw_tracer_panel(f: &mut Frame, app: &App, area: Rect) {
@@ -1173,6 +1055,31 @@ fn hint_accent(hints: &mut Vec<Span<'static>>, key: &str, color: Color) {
     ));
 }
 
+fn hint_cost(key: &str, label: &str) -> usize {
+    key.chars().count() + label.chars().count() + 4
+}
+
+fn push_budgeted_hints(
+    hints: &mut Vec<Span<'static>>,
+    items: &[(&'static str, &'static str)],
+    max_width: u16,
+    more_label: &'static str,
+) {
+    let mut used = 0usize;
+    let more_cost = hint_cost("?", more_label);
+    for (idx, (key, label)) in items.iter().enumerate() {
+        let cost = hint_cost(key, label);
+        let has_more = idx + 1 < items.len();
+        let reserved = if has_more { more_cost } else { 0 };
+        if used + cost + reserved > max_width as usize {
+            hint(hints, "?", more_label);
+            return;
+        }
+        hint(hints, key, label);
+        used += cost;
+    }
+}
+
 fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     let s = i18n::strings();
 
@@ -1202,10 +1109,34 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
             return;
         }
     }
+    if app.filter_mode {
+        let line = Line::from(vec![
+            Span::styled(" / ", Style::default().fg(Color::Black).bg(Color::Green)),
+            Span::styled(
+                format!(" {} ", s.hint_filter_examples),
+                Style::default().fg(Color::Green),
+            ),
+        ]);
+        f.render_widget(line, area);
+        return;
+    }
 
-    let mut hints: Vec<Span> = Vec::new();
+    let mut items: Vec<(&'static str, &'static str)> = vec![
+        ("?", s.hint_help),
+        ("Tab", s.hint_section_next),
+        ("/", s.hint_search),
+        ("Space", s.hint_action_menu),
+        (
+            "p",
+            if app.auto_refresh_paused {
+                s.hint_resume
+            } else {
+                s.hint_pause
+            },
+        ),
+    ];
 
-    if app.view_mode == ViewMode::Table && (app.filter_mode || !app.filter.is_empty()) {
+    if app.view_mode == ViewMode::Connections && (app.filter_mode || !app.filter.is_empty()) {
         let filter_hint = vec![
             Span::styled(" / ", Style::default().fg(Color::Black).bg(Color::Green)),
             Span::raw(" filter "),
@@ -1223,65 +1154,47 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     }
 
     match app.view_mode {
-        ViewMode::Table => {
-            // Table mode: context depends on whether detail panel is open
-            hint(&mut hints, "?", s.hint_help);
-            hint(&mut hints, "/", s.hint_search);
-            if app.show_details {
-                hint(&mut hints, "\u{2190}\u{2192}", s.hint_tabs);
-            } else {
-                hint(&mut hints, "d", s.hint_details);
+        ViewMode::Connections => {
+            if !app.show_details {
+                items.push(("d", s.hint_details));
             }
-            hint(&mut hints, "4-7", s.hint_views);
-            hint(&mut hints, "8", s.hint_ssh_hosts);
-            hint(&mut hints, "9", s.hint_tunnels);
-            hint(&mut hints, "K", s.hint_kill);
-            hint(&mut hints, "F", s.hint_forward);
-            hint(&mut hints, "Tab", s.hint_sort);
-            if !app.session.is_root && !app.session.is_elevated {
-                hint(&mut hints, "s", s.hint_sudo);
-            }
-            hint(&mut hints, "q", s.hint_quit);
+            items.push(("Enter", s.view_process));
+            items.push(("K", s.hint_kill));
+            items.push(("c", s.hint_copy));
+            items.push(("o/O", s.hint_sort));
         }
-        ViewMode::SshHosts => {
-            hint(&mut hints, "Esc", s.hint_back);
-            hint(&mut hints, "j/k", s.hint_navigate);
-            hint(&mut hints, "Enter", s.hint_open_tunnel);
-            hint(&mut hints, "r", s.hint_reload);
-            hint(&mut hints, "?", s.hint_help);
-            hint(&mut hints, "q", s.hint_quit);
+        ViewMode::Processes => {
+            items.push(("[ ]", s.hint_subtab));
+            items.push(("K", s.hint_kill));
+            items.push(("c", s.hint_copy));
         }
-        ViewMode::Tunnels => {
-            hint(&mut hints, "Esc", s.hint_back);
-            hint(&mut hints, "j/k", s.hint_navigate);
-            hint(&mut hints, "n", s.hint_new_tunnel);
-            hint(&mut hints, "K", s.hint_kill_tunnel);
-            hint(&mut hints, "r", s.hint_restart_tunnel);
-            hint(&mut hints, "s", s.hint_save_tunnels);
-            hint(&mut hints, "?", s.hint_help);
-            hint(&mut hints, "q", s.hint_quit);
-        }
-        _ => {
-            // Fullscreen views: Esc is prominent, then relevant actions
-            hint(&mut hints, "Esc", s.hint_back);
-            hint(&mut hints, "j/k", s.hint_navigate);
-            hint(&mut hints, "/", s.hint_search);
-            if matches!(
-                app.view_mode,
-                ViewMode::ProcessDetail | ViewMode::Chart | ViewMode::Topology
-            ) {
-                hint(&mut hints, "K", s.hint_kill);
+        ViewMode::Ssh => {
+            items.push(("[ ]", s.hint_subtab));
+            match app.ssh_tab {
+                SshTab::Hosts => {
+                    items.push(("Enter", s.hint_open_tunnel));
+                    items.push(("r", s.hint_reload));
+                }
+                SshTab::Tunnels => {
+                    items.push(("n", s.hint_new_tunnel));
+                    items.push(("e", s.hint_edit_tunnel));
+                    items.push(("K", s.hint_kill_tunnel));
+                    items.push(("r", s.hint_restart_tunnel));
+                    items.push(("s", s.hint_save_tunnels));
+                }
             }
-            if app.view_mode == ViewMode::ProcessDetail {
-                hint(&mut hints, "c", s.hint_copy);
-                hint(&mut hints, "t", s.hint_trace);
-            }
-            hint(&mut hints, "?", s.hint_help);
-            hint(&mut hints, "q", s.hint_quit);
         }
     }
 
-    // Language badge (always rightmost)
+    if !app.session.is_root && !app.session.is_elevated && app.view_mode == ViewMode::Connections {
+        items.push(("s", s.hint_sudo));
+    }
+    items.push(("q", s.hint_quit));
+
+    let mut hints: Vec<Span> = Vec::new();
+    let lang_width = i18n::lang().label().chars().count() + 4;
+    let max_hint_width = area.width.saturating_sub(lang_width as u16);
+    push_budgeted_hints(&mut hints, &items, max_hint_width, s.more);
     hints.push(Span::raw(" "));
     hint_accent(&mut hints, i18n::lang().label(), Color::Magenta);
 

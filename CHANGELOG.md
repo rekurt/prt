@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed (breaking)
+
+- **Top-level navigation simplified.** `ViewMode` shrinks from
+  `{ Table, Chart, Topology, ProcessDetail, Namespaces, SshHosts, Tunnels }`
+  to three sections: `Connections`, `Processes`, `Ssh`.
+  `Tab` / `Shift+Tab` cycles between sections.
+- **Sub-tabs replace fullscreen modes.** Topology and ProcessDetail are
+  sub-tabs of *Processes*; SSH Hosts and Tunnels are sub-tabs of *SSH*.
+  Switch sub-tabs with `[` / `]`.
+- **Sort moves off Tab.** `o` now picks the next sort column, `O` reverses
+  direction. `Tab` is reserved for section navigation.
+- **Per-action shortcuts collapse into a Space-key menu.** `b` (Block IP),
+  `t` (Trace), `F` (SSH Forward), `p` (Copy PID), and the old fullscreen
+  toggles `4`/`5`/`6`/`7`/`8`/`9` are removed. Use `Space` → choose
+  action. Direct shortcuts remain only for `K` (Kill) and `c` (Copy).
+- **Bottom Details panel is a single unified view** (no more 1/2/3
+  Tree/Network/Connection tabs). Combines bind type, interface, remote,
+  state, cmdline, related ports, and process tree in one scroll view.
+- **Esc cascade is armed for filter clear.** First press shows
+  "Esc again to clear filter"; a second press inside 1.5s clears.
+  Same guard for the tunnel form when it has unsaved input.
+
+### Added
+
+- **Action menu** opened with `Space` — contextual list (Kill / Copy /
+  Copy PID / Block IP / Trace / SSH forward) with j/k navigation, Enter
+  to execute, 1..9 to jump.
+- **Tunnel real status** — `TunnelStatus { Starting, Alive, Failed }`
+  replaces the hard-coded "alive". Failed tunnels stay visible in the
+  list (red) until the user restarts or removes them.
+- **Tunnel edit mode** — `e` on the selected tunnel re-opens the form
+  with all fields pre-filled; Enter replaces the tunnel in place.
+- **Inline form validation** — bad fields turn red as you type, no need
+  to wait for Enter.
+
+### Removed
+
+- **Chart fullscreen view** and its `4` shortcut.
+- **Namespaces fullscreen view**, `7` shortcut, App `namespace_cache`,
+  and the `prt_core::core::namespace` module.
+
 ## [0.3.0] - 2026-04-05
 
 ### Added

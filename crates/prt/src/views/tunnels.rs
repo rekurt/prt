@@ -1,6 +1,7 @@
 //! Fullscreen SSH tunnels manager.
 
 use crate::app::App;
+use crate::forward::TunnelStatus;
 use crossterm::event::{KeyCode, KeyEvent};
 use prt_core::core::ssh_tunnel::TunnelKind;
 use prt_core::i18n;
@@ -60,9 +61,11 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 ),
                 TunnelKind::Dynamic => "(SOCKS5)".into(),
             };
-            // Status read is fallible without &mut; we render "alive" by default
-            // since the cleanup loop in app.rs:382 prunes dead tunnels each tick.
-            let status = s.tunnel_status_alive;
+            let (status, color) = match t.last_status {
+                TunnelStatus::Alive => (s.tunnel_status_alive, Color::Green),
+                TunnelStatus::Starting => (s.tunnel_status_starting, Color::Yellow),
+                TunnelStatus::Failed => (s.tunnel_status_failed, Color::Red),
+            };
 
             Row::new(vec![
                 Cell::from(t.spec.name.clone().unwrap_or_else(|| "-".into())),
@@ -70,7 +73,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 Cell::from(local),
                 Cell::from(remote),
                 Cell::from(t.spec.host_alias.clone()),
-                Cell::from(status).style(Style::default().fg(Color::Green)),
+                Cell::from(status).style(Style::default().fg(color)),
             ])
         })
         .collect();
@@ -122,6 +125,10 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
         }
         KeyCode::Char('n') => {
             app.open_tunnel_form(None);
+            true
+        }
+        KeyCode::Char('e') => {
+            app.open_tunnel_form_edit(app.tunnels_selected);
             true
         }
         KeyCode::Char('K') | KeyCode::Delete => {
