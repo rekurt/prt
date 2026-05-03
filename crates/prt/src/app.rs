@@ -278,6 +278,7 @@ impl App {
     }
 
     pub fn refresh(&mut self) {
+        let prev_key = self.selected_key();
         if let Err(msg) = self.session.refresh() {
             self.set_status(msg);
         }
@@ -293,7 +294,7 @@ impl App {
                 self.detail_cache = None;
             }
         }
-        self.update_filtered();
+        self.update_filtered_preserving(prev_key);
     }
 
     /// Whether any bell alerts fired this cycle (for TUI to emit BEL).
@@ -318,9 +319,11 @@ impl App {
     }
 
     pub fn update_filtered(&mut self) {
-        // Remember which entry was focused before the update
         let prev_key = self.selected_key();
+        self.update_filtered_preserving(prev_key);
+    }
 
+    fn update_filtered_preserving(&mut self, prev_key: Option<(u16, u32)>) {
         self.filtered_indices = self.session.filtered_indices(&self.filter);
 
         // Try to restore focus to the same (port, pid) entry
@@ -603,6 +606,34 @@ fn parse_forward_input(input: &str) -> Option<(String, u16)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use prt_core::model::{ConnectionState, EntryStatus, PortEntry, ProcessInfo, Protocol};
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    fn tracked(port: u16, pid: u32, name: &str) -> TrackedEntry {
+        TrackedEntry {
+            entry: PortEntry {
+                protocol: Protocol::Tcp,
+                local_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port),
+                remote_addr: None,
+                state: ConnectionState::Listen,
+                process: ProcessInfo {
+                    pid,
+                    name: name.into(),
+                    path: None,
+                    cmdline: None,
+                    user: None,
+                    parent_pid: None,
+                    parent_name: None,
+                },
+            },
+            status: EntryStatus::Unchanged,
+            seen_at: Instant::now(),
+            first_seen: None,
+            suspicious: Vec::new(),
+            container_name: None,
+            service_name: None,
+        }
+    }
 
     #[test]
     fn parse_forward_simple_host_port() {
@@ -644,5 +675,25 @@ mod tests {
     fn parse_forward_invalid_port() {
         assert!(parse_forward_input("host:abc").is_none());
         assert!(parse_forward_input("host:99999").is_none());
+    }
+
+    #[test]
+    fn update_filtered_preserves_selection_from_pre_refresh_key() {
+        let mut app = App::new();
+        app.session.entries = vec![tracked(80, 1, "old-a"), tracked(443, 2, "old-b")];
+        app.filtered_indices = vec![0, 1];
+        app.selected = 1;
+
+        let prev_key = app.selected_key();
+        app.session.entries = vec![
+            tracked(22, 3, "new-a"),
+            tracked(80, 1, "old-a"),
+            tracked(443, 2, "old-b"),
+        ];
+
+        app.update_filtered_preserving(prev_key);
+
+        assert_eq!(app.selected, 2);
+        assert_eq!(app.selected_entry().unwrap().entry.process.pid, 2);
     }
 }
