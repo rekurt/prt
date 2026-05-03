@@ -1205,6 +1205,23 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
 
     let mut hints: Vec<Span> = Vec::new();
 
+    if app.view_mode == ViewMode::Table && (app.filter_mode || !app.filter.is_empty()) {
+        let filter_hint = vec![
+            Span::styled(" / ", Style::default().fg(Color::Black).bg(Color::Green)),
+            Span::raw(" filter "),
+            Span::styled("status:new", Style::default().fg(Color::Green)),
+            Span::raw(" · "),
+            Span::styled("status:gone", Style::default().fg(Color::Red)),
+            Span::raw(" · "),
+            Span::styled("risk:high", Style::default().fg(Color::Magenta)),
+            Span::raw(" · "),
+            Span::styled("proc:nginx", Style::default().fg(Color::Cyan)),
+            Span::raw(" · Esc Esc clear"),
+        ];
+        f.render_widget(Line::from(filter_hint), area);
+        return;
+    }
+
     match app.view_mode {
         ViewMode::Table => {
             // Table mode: context depends on whether detail panel is open
