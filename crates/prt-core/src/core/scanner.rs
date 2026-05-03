@@ -173,12 +173,28 @@ fn matches_term(e: &TrackedEntry, term: &str) -> bool {
     if term == "!" {
         return !e.suspicious.is_empty();
     }
+    if matches_status_alias(e, term) {
+        return true;
+    }
+    if term == "risk:high" || term == "suspicious" {
+        return !e.suspicious.is_empty();
+    }
 
     if let Some((field, value)) = term.split_once(':') {
         return matches_field_query(e, field, value);
     }
 
     matches_plain_query(e, term)
+}
+
+fn matches_status_alias(e: &TrackedEntry, term: &str) -> bool {
+    matches!(
+        (term, e.status),
+        ("new", EntryStatus::New)
+            | ("gone", EntryStatus::Gone)
+            | ("unchanged", EntryStatus::Unchanged)
+            | ("active", EntryStatus::New | EntryStatus::Unchanged)
+    )
 }
 
 fn matches_field_query(e: &TrackedEntry, field: &str, value: &str) -> bool {
@@ -215,6 +231,8 @@ fn matches_field_query(e: &TrackedEntry, field: &str, value: &str) -> bool {
             .unwrap_or("")
             .to_lowercase()
             .contains(value),
+        "risk" => value == "high" && !e.suspicious.is_empty(),
+        "status" => matches_status_alias(e, value),
         _ => matches_plain_query(e, value),
     }
 }
@@ -956,6 +974,26 @@ mod tests {
             filter_indices(&entries, "port:5432 user:missing"),
             Vec::<usize>::new()
         );
+    }
+
+    #[test]
+    fn filter_status_and_risk_aliases() {
+        use crate::model::SuspiciousReason;
+        let mut entries = vec![
+            make_tracked(80, 10, "nginx", EntryStatus::New),
+            make_tracked(443, 11, "caddy", EntryStatus::Unchanged),
+            make_tracked(53, 12, "dnsmasq", EntryStatus::Gone),
+        ];
+        entries[1]
+            .suspicious
+            .push(SuspiciousReason::ScriptOnSensitive);
+
+        assert_eq!(filter_indices(&entries, "new"), vec![0]);
+        assert_eq!(filter_indices(&entries, "status:unchanged"), vec![1]);
+        assert_eq!(filter_indices(&entries, "gone"), vec![2]);
+        assert_eq!(filter_indices(&entries, "active"), vec![0, 1]);
+        assert_eq!(filter_indices(&entries, "risk:high"), vec![1]);
+        assert_eq!(filter_indices(&entries, "suspicious"), vec![1]);
     }
 
     // ── export: table-driven ──────────────────────────────────────
