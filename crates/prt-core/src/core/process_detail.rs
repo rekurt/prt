@@ -8,6 +8,11 @@
 //! - **macOS:** uses `lsof -p {pid}` and `ps -o %cpu,rss -p {pid}`
 
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+
+const DETAIL_COMMAND_TIMEOUT: Duration = Duration::from_millis(700);
 
 /// Detailed information about a single process, fetched on demand.
 #[derive(Debug, Clone)]
@@ -120,12 +125,9 @@ fn parse_proc_stat_status(pid: u32) -> (Option<f32>, Option<u64>) {
         });
 
     // CPU% — we'd need two samples to compute; use ps as a simpler approach
-    let cpu_percent = std::process::Command::new("ps")
-        .args(["-o", "%cpu=", "-p", &pid.to_string()])
-        .output()
-        .ok()
+    let cpu_percent = command_stdout_with_timeout("ps", &["-o", "%cpu=", "-p", &pid.to_string()])
         .and_then(|o| {
-            let s = String::from_utf8_lossy(&o.stdout);
+            let s = String::from_utf8_lossy(&o);
             s.trim().parse::<f32>().ok()
         });
 
@@ -136,35 +138,26 @@ fn parse_proc_stat_status(pid: u32) -> (Option<f32>, Option<u64>) {
 #[allow(dead_code)]
 fn fetch_macos(pid: u32) -> Option<ProcessDetail> {
     // Check process exists
-    let exists = std::process::Command::new("ps")
-        .args(["-p", &pid.to_string()])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    let exists = command_stdout_with_timeout("ps", &["-p", &pid.to_string()]).is_some();
 
     if !exists {
         return None;
     }
 
-    let cwd = std::process::Command::new("lsof")
-        .args(["-a", "-p", &pid.to_string(), "-d", "cwd", "-Fn"])
-        .output()
-        .ok()
-        .and_then(|o| parse_lsof_cwd(&String::from_utf8_lossy(&o.stdout)));
+    let cwd = command_stdout_with_timeout(
+        "lsof",
+        &["-nP", "-a", "-p", &pid.to_string(), "-d", "cwd", "-Fn"],
+    )
+    .and_then(|o| parse_lsof_cwd(&String::from_utf8_lossy(&o)));
 
-    let open_files = std::process::Command::new("lsof")
-        .args(["-p", &pid.to_string(), "-Fn"])
-        .output()
-        .ok()
-        .map(|o| parse_lsof_files(&String::from_utf8_lossy(&o.stdout)))
+    let open_files = command_stdout_with_timeout("lsof", &["-nP", "-p", &pid.to_string(), "-Fn"])
+        .map(|o| parse_lsof_files(&String::from_utf8_lossy(&o)))
         .unwrap_or_default();
 
-    let (cpu_percent, rss_kb) = std::process::Command::new("ps")
-        .args(["-o", "%cpu=,rss=", "-p", &pid.to_string()])
-        .output()
-        .ok()
-        .map(|o| parse_ps_cpu_rss(&String::from_utf8_lossy(&o.stdout)))
-        .unwrap_or((None, None));
+    let (cpu_percent, rss_kb) =
+        command_stdout_with_timeout("ps", &["-o", "%cpu=,rss=", "-p", &pid.to_string()])
+            .map(|o| parse_ps_cpu_rss(&String::from_utf8_lossy(&o)))
+            .unwrap_or((None, None));
 
     // environ not easily accessible on macOS without SIP issues
     let env_vars = Vec::new();
@@ -176,6 +169,42 @@ fn fetch_macos(pid: u32) -> Option<ProcessDetail> {
         cpu_percent,
         rss_kb,
     })
+}
+
+fn command_stdout_with_timeout(cmd: &str, args: &[&str]) -> Option<Vec<u8>> {
+    let mut child = Command::new(cmd)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    let mut stdout = child.stdout.take()?;
+    let reader = thread::spawn(move || {
+        let mut out = Vec::new();
+        use std::io::Read;
+        let _ = stdout.read_to_end(&mut out);
+        out
+    });
+
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let out = reader.join().ok()?;
+                return status.success().then_some(out);
+            }
+            Ok(None) if start.elapsed() >= DETAIL_COMMAND_TIMEOUT => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = reader.join();
+                return None;
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(20)),
+            Err(_) => return None,
+        }
+    }
 }
 
 /// Parse `lsof -d cwd -Fn` output for the cwd path.

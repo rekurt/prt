@@ -124,12 +124,7 @@ ports, and the process tree — no tab switching needed.
 The **Topology** sub-tab in Processes draws an ASCII tree
 `process → :local_port → remote` for the whole working set.
 
-| View | Key | Description |
-|------|-----|-------------|
-| **Chart** | `4` | Horizontal bar chart showing connection count per process |
-| **Topology** | `5` | ASCII network graph: process → local port → remote host |
-| **Process Detail** | `6` | Comprehensive info page: CWD, CPU %, RSS, open files, environment variables, all connections, network interfaces, process tree |
-| **Namespaces** | `7` | Network namespace grouping (Linux only). Shows named namespaces from `/run/netns/` or raw inode numbers |
+All scrollable views support `j`/`k` and `g`/`G`.
 
 ### Action menu (`Space`)
 
