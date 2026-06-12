@@ -194,6 +194,13 @@ impl SshTunnel {
         self.started_at.elapsed()
     }
 
+    /// PID of the current `ssh` child. For `-L`/`-D` tunnels this is the
+    /// process that binds the local port, so the listener health check can
+    /// confirm a `LISTEN` socket really belongs to *this* tunnel.
+    pub fn pid(&self) -> u32 {
+        self.child.id()
+    }
+
     /// The full `ssh` command line this tunnel was spawned with — handy for
     /// copying to the clipboard and reproducing the tunnel outside prt. Each
     /// argument is shell-quoted so paths with spaces (e.g. an identity file

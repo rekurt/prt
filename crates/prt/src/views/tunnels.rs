@@ -17,12 +17,20 @@ use std::time::Duration;
 /// its `LISTEN` socket, so we'd otherwise flash a bogus "no listener".
 const LISTENER_GRACE: Duration = TICK_RATE.saturating_mul(2);
 
-/// True if a local listener is currently bound to `local_port` in the latest
-/// scan — confirms an `Alive` tunnel actually opened its socket. Read-only:
+/// True if `ssh_pid` owns a `LISTEN` socket on `local_port` in the latest scan
+/// — confirms an `Alive` tunnel actually opened its own socket. Read-only:
 /// reuses the data prt already scanned, opens no new connections.
-fn has_local_listener(app: &App, local_port: u16) -> bool {
+///
+/// The PID match matters: OpenSSH defaults to `ExitOnForwardFailure no`, so on
+/// a local-port conflict the `ssh` child keeps running while *another* process
+/// owns the port. Matching `LISTEN + port` alone would then mask the bind
+/// failure as healthy; requiring the listener's PID to be our `ssh` child
+/// avoids that false green.
+fn has_local_listener(app: &App, local_port: u16, ssh_pid: u32) -> bool {
     app.session.entries.iter().any(|e| {
-        e.entry.state == ConnectionState::Listen && e.entry.local_addr.port() == local_port
+        e.entry.state == ConnectionState::Listen
+            && e.entry.local_addr.port() == local_port
+            && e.entry.process.pid == ssh_pid
     })
 }
 
@@ -96,7 +104,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             let (status, color) = match t.last_status {
                 TunnelStatus::Alive => {
                     let scan_can_confirm = !app.auto_refresh_paused && t.uptime() >= LISTENER_GRACE;
-                    if !scan_can_confirm || has_local_listener(app, t.spec.local_port) {
+                    if !scan_can_confirm || has_local_listener(app, t.spec.local_port, t.pid()) {
                         (s.tunnel_status_alive.to_string(), Color::Green)
                     } else {
                         (s.tunnel_health_no_listener.to_string(), Color::Yellow)
