@@ -9,6 +9,7 @@
 //! 1. **NonRootPrivileged** — non-root process listening on port < 1024
 //! 2. **ScriptOnSensitive** — scripting language on a sensitive port (22, 80, 443)
 //! 3. **RootHighPortOutgoing** — root process with outgoing connection to high port
+//! 4. **ProxyListening** — process listening on a well-known SOCKS/proxy port
 
 use crate::model::{ConnectionState, PortEntry, SuspiciousReason};
 
@@ -17,6 +18,17 @@ const SCRIPT_NAMES: &[&str] = &["python", "python3", "perl", "ruby", "node"];
 
 /// Sensitive ports that should not normally be served by scripting languages.
 const SENSITIVE_PORTS: &[u16] = &[22, 80, 443];
+
+/// Well-known SOCKS/proxy listener ports. Deliberately narrow — `8080`/`8443`
+/// are excluded because they are far more often legitimate HTTP(S)-alt servers
+/// than proxies, which would make this heuristic too noisy.
+const PROXY_PORTS: &[u16] = &[
+    1080, // SOCKS
+    1081, // SOCKS (alt)
+    3128, // Squid
+    9050, // Tor SOCKS
+    9150, // Tor Browser SOCKS
+];
 
 /// Run all heuristics on a single port entry and return matching reasons.
 pub fn check(entry: &PortEntry) -> Vec<SuspiciousReason> {
@@ -30,6 +42,9 @@ pub fn check(entry: &PortEntry) -> Vec<SuspiciousReason> {
     }
     if is_root_high_port_outgoing(entry) {
         reasons.push(SuspiciousReason::RootHighPortOutgoing);
+    }
+    if is_proxy_listening(entry) {
+        reasons.push(SuspiciousReason::ProxyListening);
     }
 
     reasons
@@ -81,6 +96,15 @@ fn is_root_high_port_outgoing(entry: &PortEntry) -> bool {
         Some(addr) => addr.port() >= 1024,
         None => false,
     }
+}
+
+/// Process listening on a well-known SOCKS/proxy port (see [`PROXY_PORTS`]).
+///
+/// A SOCKS/proxy listener is worth surfacing: it may be a legitimate `ssh -D`
+/// tunnel, but it can equally be an attacker pivoting traffic through the host.
+/// Flagging it lets the operator confirm the listener is one they started.
+fn is_proxy_listening(entry: &PortEntry) -> bool {
+    entry.state == ConnectionState::Listen && PROXY_PORTS.contains(&entry.local_addr.port())
 }
 
 #[cfg(test)]
@@ -292,5 +316,35 @@ mod tests {
     fn root_on_standard_port_is_clean() {
         let entry = listen_entry(443, "nginx", Some("root"));
         assert!(check(&entry).is_empty());
+    }
+
+    // ── ProxyListening ───────────────────────────────────────────
+
+    #[test]
+    fn socks_listener_flagged() {
+        let entry = listen_entry(1080, "ssh", Some("user"));
+        assert!(is_proxy_listening(&entry));
+        assert!(check(&entry).contains(&SuspiciousReason::ProxyListening));
+    }
+
+    #[test]
+    fn tor_socks_listener_flagged() {
+        let entry = listen_entry(9050, "tor", Some("debian-tor"));
+        assert!(check(&entry).contains(&SuspiciousReason::ProxyListening));
+    }
+
+    #[test]
+    fn http_alt_8080_not_flagged_as_proxy() {
+        // 8080 is excluded to avoid false positives on legitimate http-alt.
+        let entry = listen_entry(8080, "nginx", Some("www-data"));
+        assert!(!is_proxy_listening(&entry));
+    }
+
+    #[test]
+    fn proxy_port_established_not_flagged() {
+        // An outgoing connection to a proxy port is not a local proxy listener.
+        let mut entry = listen_entry(1080, "curl", Some("user"));
+        entry.state = ConnectionState::Established;
+        assert!(!is_proxy_listening(&entry));
     }
 }
