@@ -22,6 +22,11 @@ const SENSITIVE_PORTS: &[u16] = &[22, 80, 443];
 /// Well-known SOCKS/proxy listener ports. Deliberately narrow — `8080`/`8443`
 /// are excluded because they are far more often legitimate HTTP(S)-alt servers
 /// than proxies, which would make this heuristic too noisy.
+///
+/// NOTE: intentionally a separate, narrower list from the service-name table in
+/// `known_ports.rs` (which labels ports for display). Adding a proxy port to
+/// `known_ports` does not flag it here, and vice versa — keep the two in sync
+/// by hand when it matters.
 const PROXY_PORTS: &[u16] = &[
     1080, // SOCKS
     1081, // SOCKS (alt)

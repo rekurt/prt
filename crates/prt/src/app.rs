@@ -12,7 +12,7 @@ use prt_core::core::ssh_config::{self, SshHost};
 use prt_core::core::ssh_tunnel::SshTunnelSpec;
 use prt_core::core::{killer, process_detail, session::Session};
 use prt_core::i18n;
-use prt_core::model::{ProcessesTab, SshTab, TrackedEntry, ViewMode, TICK_RATE};
+use prt_core::model::{ConnectionState, ProcessesTab, SshTab, TrackedEntry, ViewMode, TICK_RATE};
 
 use crate::forward::ForwardManager;
 use crate::tracer::StraceSession;
@@ -20,6 +20,7 @@ use crate::views::action_menu::ActionMenu;
 use crate::views::command_palette::CommandPalette;
 use crate::views::tunnel_form::TunnelFormState;
 use ratatui::prelude::*;
+use std::collections::HashSet;
 use std::io::stdout;
 use std::time::Instant;
 
@@ -572,9 +573,18 @@ pub fn run() -> Result<()> {
             }
         }
 
-        // Refresh tunnel statuses, then auto-reconnect any that died on their
-        // own (with backoff, so an unreachable host isn't hammered).
-        app.forwards.cleanup();
+        // Refresh tunnel statuses from the latest scan (which local ports are
+        // listening), then auto-reconnect any whose process died (with backoff,
+        // so an unreachable host isn't hammered). When auto-refresh is paused
+        // the scan is stale, so the listener health can't be trusted.
+        let listening: HashSet<u16> = app
+            .session
+            .entries
+            .iter()
+            .filter(|e| e.entry.state == ConnectionState::Listen)
+            .map(|e| e.entry.local_addr.port())
+            .collect();
+        app.forwards.cleanup(&listening, !app.auto_refresh_paused);
         app.forwards.reconnect_failed();
 
         if last_tick.elapsed() >= TICK_RATE {

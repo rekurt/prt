@@ -76,6 +76,9 @@ fn builtin_lookup(port: u16) -> Option<&'static str> {
         995 => Some("pop3s"),
 
         // ── Common registered ports ──────────────────────────────
+        // NOTE: proxy/SOCKS labels here are for display only. The suspicious-
+        // listener heuristic keeps its own narrower `PROXY_PORTS` list in
+        // `core/suspicious.rs`; the two are intentionally decoupled.
         1080 => Some("socks"),
         1081 => Some("socks"),
         1194 => Some("openvpn"),
