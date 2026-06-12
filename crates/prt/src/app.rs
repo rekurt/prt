@@ -572,8 +572,10 @@ pub fn run() -> Result<()> {
             }
         }
 
-        // Cleanup dead tunnels
+        // Refresh tunnel statuses, then auto-reconnect any that died on their
+        // own (with backoff, so an unreachable host isn't hammered).
         app.forwards.cleanup();
+        app.forwards.reconnect_failed();
 
         if last_tick.elapsed() >= TICK_RATE {
             if !app.auto_refresh_paused {

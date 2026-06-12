@@ -18,6 +18,11 @@ pub enum TunnelStatus {
     Failed,
 }
 
+/// First delay before retrying a failed auto-reconnect tunnel.
+const INITIAL_BACKOFF: Duration = Duration::from_secs(2);
+/// Upper bound for the exponential reconnect backoff.
+const MAX_BACKOFF: Duration = Duration::from_secs(60);
+
 /// A single SSH tunnel: a running `ssh` child process plus the spec and
 /// resolved argument list (kept so `restart()` reuses the same resolution).
 pub struct SshTunnel {
@@ -27,6 +32,14 @@ pub struct SshTunnel {
     pub last_status: TunnelStatus,
     /// When the current `ssh` child was spawned — reset on `restart()`.
     started_at: Instant,
+    /// Whether to auto-restart this tunnel after it fails on its own.
+    /// Manual `kill_at` removes the tunnel entirely, so it never reconnects.
+    pub auto_reconnect: bool,
+    /// Current exponential backoff between reconnect attempts.
+    retry_backoff: Duration,
+    /// Earliest instant the next reconnect attempt may run. `None` once the
+    /// tunnel is healthy or no retry has been scheduled yet.
+    next_retry_at: Option<Instant>,
 }
 
 impl SshTunnel {
@@ -42,6 +55,9 @@ impl SshTunnel {
             child,
             last_status: TunnelStatus::Starting,
             started_at: Instant::now(),
+            auto_reconnect: true,
+            retry_backoff: INITIAL_BACKOFF,
+            next_retry_at: None,
         })
     }
 
@@ -66,6 +82,9 @@ impl SshTunnel {
             child,
             last_status: TunnelStatus::Starting,
             started_at: Instant::now(),
+            auto_reconnect: true,
+            retry_backoff: INITIAL_BACKOFF,
+            next_retry_at: None,
         })
     }
 
@@ -118,6 +137,8 @@ impl SshTunnel {
         self.child = spawn_ssh_args(&self.args)?;
         self.last_status = TunnelStatus::Starting;
         self.started_at = Instant::now();
+        self.retry_backoff = INITIAL_BACKOFF;
+        self.next_retry_at = None;
         Ok(())
     }
 
@@ -230,6 +251,39 @@ impl ForwardManager {
         for tunnel in &mut self.tunnels {
             tunnel.refresh_status();
         }
+    }
+
+    /// Auto-restart tunnels that have failed on their own, with exponential
+    /// backoff so an unreachable host isn't hammered. Call after `cleanup()`
+    /// (which is what marks tunnels `Failed`). Returns the number of restart
+    /// attempts that succeeded this tick.
+    ///
+    /// Scheduling: the first time a failure is observed, the next attempt is
+    /// deferred by `INITIAL_BACKOFF`; each failed attempt doubles the delay up
+    /// to `MAX_BACKOFF`; a successful restart resets the backoff via `restart`.
+    pub fn reconnect_failed(&mut self) -> usize {
+        let now = Instant::now();
+        let mut reconnected = 0;
+        for tunnel in &mut self.tunnels {
+            if tunnel.last_status != TunnelStatus::Failed || !tunnel.auto_reconnect {
+                continue;
+            }
+            match tunnel.next_retry_at {
+                // No attempt scheduled yet: schedule the first one and wait.
+                None => tunnel.next_retry_at = Some(now + tunnel.retry_backoff),
+                // Scheduled but not yet due: keep waiting.
+                Some(at) if at > now => {}
+                // Due: try to restart.
+                Some(_) => match tunnel.restart() {
+                    Ok(()) => reconnected += 1, // restart() resets the backoff
+                    Err(_) => {
+                        tunnel.retry_backoff = (tunnel.retry_backoff * 2).min(MAX_BACKOFF);
+                        tunnel.next_retry_at = Some(now + tunnel.retry_backoff);
+                    }
+                },
+            }
+        }
+        reconnected
     }
 
     /// Drop tunnels that have already failed. Called when the user asks to

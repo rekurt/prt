@@ -194,3 +194,21 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
         _ => false,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fmt_uptime_buckets() {
+        assert_eq!(fmt_uptime(Duration::from_secs(0)), "0s");
+        assert_eq!(fmt_uptime(Duration::from_secs(45)), "45s");
+        assert_eq!(fmt_uptime(Duration::from_secs(59)), "59s");
+        assert_eq!(fmt_uptime(Duration::from_secs(60)), "1m");
+        assert_eq!(fmt_uptime(Duration::from_secs(3599)), "59m");
+        assert_eq!(fmt_uptime(Duration::from_secs(3600)), "1h00m");
+        assert_eq!(fmt_uptime(Duration::from_secs(3600 + 4 * 60)), "1h04m");
+        assert_eq!(fmt_uptime(Duration::from_secs(86_400)), "1d00h");
+        assert_eq!(fmt_uptime(Duration::from_secs(86_400 + 5 * 3600)), "1d05h");
+    }
+}
