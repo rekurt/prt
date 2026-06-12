@@ -3,26 +3,19 @@
 use crate::app::App;
 use crate::forward::TunnelStatus;
 use crossterm::event::{KeyCode, KeyEvent};
+use prt_core::core::scanner::format_uptime;
 use prt_core::core::ssh_tunnel::TunnelKind;
 use prt_core::i18n;
-use prt_core::model::ConnectionState;
+use prt_core::model::{ConnectionState, TICK_RATE};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use std::time::Duration;
 
-/// Compact uptime: `45s`, `12m`, `3h04m`, `2d05h`.
-fn fmt_uptime(d: Duration) -> String {
-    let secs = d.as_secs();
-    if secs < 60 {
-        format!("{secs}s")
-    } else if secs < 3600 {
-        format!("{}m", secs / 60)
-    } else if secs < 86_400 {
-        format!("{}h{:02}m", secs / 3600, (secs % 3600) / 60)
-    } else {
-        format!("{}d{:02}h", secs / 86_400, (secs % 86_400) / 3600)
-    }
-}
+/// Grace period after (re)start before a missing listener is reported. The scan
+/// backing `has_local_listener` only refreshes every `TICK_RATE`, and a tunnel
+/// needs a tick to go `Starting -> Alive` plus another for the scan to observe
+/// its `LISTEN` socket, so we'd otherwise flash a bogus "no listener".
+const LISTENER_GRACE: Duration = TICK_RATE.saturating_mul(2);
 
 /// True if a local listener is currently bound to `local_port` in the latest
 /// scan — confirms an `Alive` tunnel actually opened its socket. Read-only:
@@ -91,9 +84,19 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             // ssh child whose local port isn't actually being listened on is a
             // common sign of a broken `-D`/`-L` (e.g. bind failure), so surface
             // it as a yellow warning rather than a misleading green "alive".
+            //
+            // This signal is advisory and view-only: the tunnel stays `Alive`,
+            // so the auto-reconnect loop never acts on a "no listener" tunnel.
+            //
+            // Guard against false positives: the scan refreshes only every
+            // `TICK_RATE` (and not at all while auto-refresh is paused), so a
+            // freshly (re)started tunnel hasn't been observed yet. Within the
+            // grace window — or whenever the scan is frozen — trust the `Alive`
+            // status instead of crying "no listener".
             let (status, color) = match t.last_status {
                 TunnelStatus::Alive => {
-                    if has_local_listener(app, t.spec.local_port) {
+                    let scan_can_confirm = !app.auto_refresh_paused && t.uptime() >= LISTENER_GRACE;
+                    if !scan_can_confirm || has_local_listener(app, t.spec.local_port) {
                         (s.tunnel_status_alive.to_string(), Color::Green)
                     } else {
                         (s.tunnel_health_no_listener.to_string(), Color::Yellow)
@@ -106,7 +109,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             // Uptime is only meaningful while the child is running.
             let uptime = match t.last_status {
                 TunnelStatus::Failed => "-".to_string(),
-                _ => fmt_uptime(t.uptime()),
+                _ => format_uptime(t.uptime()),
             };
 
             Row::new(vec![
@@ -192,23 +195,5 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
             true
         }
         _ => false,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fmt_uptime_buckets() {
-        assert_eq!(fmt_uptime(Duration::from_secs(0)), "0s");
-        assert_eq!(fmt_uptime(Duration::from_secs(45)), "45s");
-        assert_eq!(fmt_uptime(Duration::from_secs(59)), "59s");
-        assert_eq!(fmt_uptime(Duration::from_secs(60)), "1m");
-        assert_eq!(fmt_uptime(Duration::from_secs(3599)), "59m");
-        assert_eq!(fmt_uptime(Duration::from_secs(3600)), "1h00m");
-        assert_eq!(fmt_uptime(Duration::from_secs(3600 + 4 * 60)), "1h04m");
-        assert_eq!(fmt_uptime(Duration::from_secs(86_400)), "1d00h");
-        assert_eq!(fmt_uptime(Duration::from_secs(86_400 + 5 * 3600)), "1d05h");
     }
 }

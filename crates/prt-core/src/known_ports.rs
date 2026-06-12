@@ -2,6 +2,11 @@
 //!
 //! Provides a compile-time lookup table for ~170 common ports.
 //! User overrides from `~/.config/prt/config.toml` take precedence.
+//!
+//! NOTE: the proxy/SOCKS ports here are for *display* naming only. The
+//! suspicious-listener heuristic uses its own intentionally narrower list,
+//! `crate::core::suspicious::PROXY_PORTS` — adding a proxy port here does not
+//! automatically flag it as suspicious.
 
 use std::collections::HashMap;
 

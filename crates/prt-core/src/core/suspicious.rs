@@ -22,6 +22,11 @@ const SENSITIVE_PORTS: &[u16] = &[22, 80, 443];
 /// Well-known SOCKS/proxy listener ports. Deliberately narrow — `8080`/`8443`
 /// are excluded because they are far more often legitimate HTTP(S)-alt servers
 /// than proxies, which would make this heuristic too noisy.
+///
+/// This is intentionally a separate, tighter list from
+/// `crate::known_ports::known_service` (which names many proxy ports for
+/// display); keep the two in sync by hand when adding a proxy port that should
+/// also drive this heuristic.
 const PROXY_PORTS: &[u16] = &[
     1080, // SOCKS
     1081, // SOCKS (alt)

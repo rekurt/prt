@@ -144,6 +144,22 @@ pub fn format_duration(d: Duration) -> String {
     }
 }
 
+/// Like [`format_duration`] but keeps the finer unit for longer spans:
+/// `45s`, `12m`, `3h04m`, `2d05h`. Used for tunnel uptime, where minute/hour
+/// precision is more useful than [`format_duration`]'s coarser buckets.
+pub fn format_uptime(d: Duration) -> String {
+    let secs = d.as_secs();
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else if secs < 86_400 {
+        format!("{}h{:02}m", secs / 3600, (secs % 3600) / 60)
+    } else {
+        format!("{}d{:02}h", secs / 86_400, (secs % 86_400) / 3600)
+    }
+}
+
 /// Sort entries in-place by the given column and direction.
 pub fn sort_entries(entries: &mut [TrackedEntry], state: &SortState) {
     entries.sort_by(|a, b| {
@@ -1229,6 +1245,22 @@ mod tests {
         for (dur, expected) in cases {
             assert_eq!(format_duration(dur), expected, "duration {:?}", dur);
         }
+    }
+
+    #[test]
+    fn format_uptime_buckets() {
+        assert_eq!(format_uptime(Duration::from_secs(0)), "0s");
+        assert_eq!(format_uptime(Duration::from_secs(45)), "45s");
+        assert_eq!(format_uptime(Duration::from_secs(59)), "59s");
+        assert_eq!(format_uptime(Duration::from_secs(60)), "1m");
+        assert_eq!(format_uptime(Duration::from_secs(3599)), "59m");
+        assert_eq!(format_uptime(Duration::from_secs(3600)), "1h00m");
+        assert_eq!(format_uptime(Duration::from_secs(3600 + 4 * 60)), "1h04m");
+        assert_eq!(format_uptime(Duration::from_secs(86_400)), "1d00h");
+        assert_eq!(
+            format_uptime(Duration::from_secs(86_400 + 5 * 3600)),
+            "1d05h"
+        );
     }
 
     // ── build_process_tree ────────────────────────────────────────

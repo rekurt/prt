@@ -22,6 +22,19 @@ pub enum TunnelStatus {
 const INITIAL_BACKOFF: Duration = Duration::from_secs(2);
 /// Upper bound for the exponential reconnect backoff.
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
+/// How long a tunnel must stay `Alive` before it's considered genuinely
+/// recovered and its backoff is reset. Without this, a tunnel to an
+/// unreachable host (where `ssh` survives the brief spawn check but dies a few
+/// seconds later on TCP timeout) would have its backoff reset on every respawn,
+/// defeating the exponential growth and hammering the host every couple of
+/// seconds. The reset therefore lives in `refresh_status`, gated on uptime —
+/// not in the respawn path.
+const STABILITY_THRESHOLD: Duration = Duration::from_secs(30);
+/// Give up auto-reconnecting after this many consecutive failed attempts so a
+/// permanently unreachable host isn't retried forever. The tunnel stays
+/// `Failed` (and `auto_reconnect` flips to `false`), which lets `save`/prune
+/// remove it and lets the user restart it manually.
+const MAX_RECONNECT_ATTEMPTS: u32 = 10;
 
 /// A single SSH tunnel: a running `ssh` child process plus the spec and
 /// resolved argument list (kept so `restart()` reuses the same resolution).
@@ -34,22 +47,23 @@ pub struct SshTunnel {
     started_at: Instant,
     /// Whether to auto-restart this tunnel after it fails on its own.
     /// Manual `kill_at` removes the tunnel entirely, so it never reconnects.
+    /// Flipped to `false` once `MAX_RECONNECT_ATTEMPTS` is exhausted.
     pub auto_reconnect: bool,
     /// Current exponential backoff between reconnect attempts.
     retry_backoff: Duration,
+    /// Consecutive failed reconnect attempts; reset once the tunnel is stably
+    /// `Alive`. Drives the give-up at `MAX_RECONNECT_ATTEMPTS`.
+    retry_count: u32,
     /// Earliest instant the next reconnect attempt may run. `None` once the
     /// tunnel is healthy or no retry has been scheduled yet.
     next_retry_at: Option<Instant>,
 }
 
 impl SshTunnel {
-    /// Spawn an `ssh` process for `spec` with no extra host resolution
-    /// (relies on `~/.ssh/config` or DNS for the alias).
-    pub fn spawn(spec: SshTunnelSpec) -> Result<Self, String> {
-        spec.validate()?;
-        let args = spec.ssh_args();
-        let child = spawn_ssh_args(&args)?;
-        Ok(Self {
+    /// Assemble a tunnel from a freshly spawned child. Single place that seeds
+    /// the reconnect/uptime bookkeeping so new fields only need adding once.
+    fn from_child(spec: SshTunnelSpec, args: Vec<String>, child: Child) -> Self {
+        Self {
             spec,
             args,
             child,
@@ -57,8 +71,18 @@ impl SshTunnel {
             started_at: Instant::now(),
             auto_reconnect: true,
             retry_backoff: INITIAL_BACKOFF,
+            retry_count: 0,
             next_retry_at: None,
-        })
+        }
+    }
+
+    /// Spawn an `ssh` process for `spec` with no extra host resolution
+    /// (relies on `~/.ssh/config` or DNS for the alias).
+    pub fn spawn(spec: SshTunnelSpec) -> Result<Self, String> {
+        spec.validate()?;
+        let args = spec.ssh_args();
+        let child = spawn_ssh_args(&args)?;
+        Ok(Self::from_child(spec, args, child))
     }
 
     /// Spawn an `ssh` process for `spec`. For aliases defined only in prt's
@@ -76,16 +100,7 @@ impl SshTunnel {
             _ => spec.ssh_args(),
         };
         let child = spawn_ssh_args(&args)?;
-        Ok(Self {
-            spec,
-            args,
-            child,
-            last_status: TunnelStatus::Starting,
-            started_at: Instant::now(),
-            auto_reconnect: true,
-            retry_backoff: INITIAL_BACKOFF,
-            next_retry_at: None,
-        })
+        Ok(Self::from_child(spec, args, child))
     }
 
     /// Backwards-compat shortcut: spawn a Local tunnel matching the legacy
@@ -116,6 +131,20 @@ impl SshTunnel {
                     // promote to Alive.
                     TunnelStatus::Alive
                 }
+                TunnelStatus::Alive => {
+                    // Only a sustained `Alive` period proves the tunnel really
+                    // came up (an unreachable host keeps `ssh` alive for a few
+                    // seconds before TCP timeout). Reset the backoff here rather
+                    // than on respawn so the exponential growth survives a host
+                    // that flaps every few seconds.
+                    if self.started_at.elapsed() >= STABILITY_THRESHOLD {
+                        self.retry_backoff = INITIAL_BACKOFF;
+                        self.retry_count = 0;
+                        self.next_retry_at = None;
+                    }
+                    TunnelStatus::Alive
+                }
+                // `Failed` with a still-running child shouldn't happen.
                 other => other,
             },
             Ok(Some(_)) => TunnelStatus::Failed,
@@ -131,14 +160,32 @@ impl SshTunnel {
         let _ = self.child.wait();
     }
 
-    /// Kill and respawn using the previously resolved arg list.
-    pub fn restart(&mut self) -> Result<(), String> {
+    /// Kill the current child and spawn a fresh one with the same arg list.
+    /// `validate` runs the brief blocking liveness check (good for interactive
+    /// restart, which wants immediate error feedback); auto-reconnect passes
+    /// `false` so it never blocks the UI thread on the spawn sleep.
+    fn respawn(&mut self, validate: bool) -> Result<(), String> {
         self.kill();
-        self.child = spawn_ssh_args(&self.args)?;
+        self.child = if validate {
+            spawn_ssh_args(&self.args)?
+        } else {
+            spawn_ssh_args_nowait(&self.args)?
+        };
         self.last_status = TunnelStatus::Starting;
         self.started_at = Instant::now();
+        Ok(())
+    }
+
+    /// Manual restart: kill and respawn, then wipe the reconnect bookkeeping so
+    /// the user's explicit action gives the tunnel a clean slate.
+    pub fn restart(&mut self) -> Result<(), String> {
+        self.respawn(true)?;
         self.retry_backoff = INITIAL_BACKOFF;
+        self.retry_count = 0;
         self.next_retry_at = None;
+        // Re-engage auto-reconnect: a manual restart means the user wants this
+        // tunnel back, even if a prior run had exhausted its retries.
+        self.auto_reconnect = true;
         Ok(())
     }
 
@@ -148,15 +195,45 @@ impl SshTunnel {
     }
 
     /// The full `ssh` command line this tunnel was spawned with — handy for
-    /// copying to the clipboard and reproducing the tunnel outside prt.
+    /// copying to the clipboard and reproducing the tunnel outside prt. Each
+    /// argument is shell-quoted so paths with spaces (e.g. an identity file
+    /// under `/Users/x/my keys/id_rsa`) paste back as a single argument.
     pub fn command_string(&self) -> String {
         let mut cmd = String::from("ssh");
         for arg in &self.args {
             cmd.push(' ');
-            cmd.push_str(arg);
+            cmd.push_str(&shell_quote(arg));
         }
         cmd
     }
+}
+
+/// Quote a single argument for safe pasting into a POSIX shell. Returns the
+/// argument unchanged when it contains only shell-safe characters; otherwise
+/// wraps it in single quotes, escaping any embedded single quote as `'\''`.
+fn shell_quote(arg: &str) -> String {
+    let safe = !arg.is_empty()
+        && arg.bytes().all(|b| {
+            b.is_ascii_alphanumeric()
+                || matches!(
+                    b,
+                    b'_' | b'-' | b'.' | b'/' | b':' | b'=' | b'@' | b',' | b'+'
+                )
+        });
+    if safe {
+        return arg.to_string();
+    }
+    let mut out = String::with_capacity(arg.len() + 2);
+    out.push('\'');
+    for ch in arg.chars() {
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
 }
 
 impl Drop for SshTunnel {
@@ -200,6 +277,19 @@ fn spawn_ssh_args(args: &[String]) -> Result<Child, String> {
         return Err(format!("failed to establish ssh tunnel: {details}"));
     }
     Ok(child)
+}
+
+/// Spawn `ssh` without the blocking liveness check. Used by auto-reconnect,
+/// which runs on the UI thread every loop iteration and must not sleep; a
+/// respawn that dies immediately is caught on the next `cleanup()` tick.
+fn spawn_ssh_args_nowait(args: &[String]) -> Result<Child, String> {
+    Command::new("ssh")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("failed to start ssh: {e}"))
 }
 
 /// Manages multiple SSH tunnels.
@@ -259,8 +349,11 @@ impl ForwardManager {
     /// attempts that succeeded this tick.
     ///
     /// Scheduling: the first time a failure is observed, the next attempt is
-    /// deferred by `INITIAL_BACKOFF`; each failed attempt doubles the delay up
-    /// to `MAX_BACKOFF`; a successful restart resets the backoff via `restart`.
+    /// deferred by `INITIAL_BACKOFF`; the backoff doubles on each attempt up to
+    /// `MAX_BACKOFF` and is only reset once the tunnel stays `Alive` for
+    /// `STABILITY_THRESHOLD` (see `refresh_status`). After
+    /// `MAX_RECONNECT_ATTEMPTS` consecutive failures the tunnel gives up
+    /// (`auto_reconnect = false`) so an unreachable host isn't retried forever.
     pub fn reconnect_failed(&mut self) -> usize {
         let now = Instant::now();
         let mut reconnected = 0;
@@ -273,24 +366,41 @@ impl ForwardManager {
                 None => tunnel.next_retry_at = Some(now + tunnel.retry_backoff),
                 // Scheduled but not yet due: keep waiting.
                 Some(at) if at > now => {}
-                // Due: try to restart.
-                Some(_) => match tunnel.restart() {
-                    Ok(()) => reconnected += 1, // restart() resets the backoff
-                    Err(_) => {
-                        tunnel.retry_backoff = (tunnel.retry_backoff * 2).min(MAX_BACKOFF);
-                        tunnel.next_retry_at = Some(now + tunnel.retry_backoff);
+                // Due: try to respawn (non-blocking — never sleeps the UI).
+                Some(_) => {
+                    tunnel.retry_count += 1;
+                    let outcome = tunnel.respawn(false);
+                    // Grow the backoff for the *next* attempt regardless of
+                    // whether this spawn launched; only a sustained `Alive`
+                    // period resets it.
+                    tunnel.retry_backoff = (tunnel.retry_backoff * 2).min(MAX_BACKOFF);
+                    match outcome {
+                        Ok(()) => {
+                            reconnected += 1;
+                            // Reschedule from the next observed failure.
+                            tunnel.next_retry_at = None;
+                        }
+                        Err(_) => {
+                            tunnel.next_retry_at = Some(now + tunnel.retry_backoff);
+                        }
                     }
-                },
+                    if tunnel.retry_count >= MAX_RECONNECT_ATTEMPTS {
+                        tunnel.auto_reconnect = false;
+                    }
+                }
             }
         }
         reconnected
     }
 
-    /// Drop tunnels that have already failed. Called when the user asks to
-    /// prune the list (e.g. via "save" which only persists running tunnels).
+    /// Drop tunnels that have permanently failed — i.e. `Failed` *and* no
+    /// longer auto-reconnecting (retries exhausted or explicitly disabled).
+    /// Tunnels still cycling through reconnect attempts are kept, so saving the
+    /// list (which calls this) never silently deletes a tunnel that just
+    /// happens to be between retries.
     pub fn drop_failed(&mut self) {
         self.tunnels
-            .retain(|t| t.last_status != TunnelStatus::Failed);
+            .retain(|t| t.last_status != TunnelStatus::Failed || t.auto_reconnect);
     }
 
     /// Kill the tunnel at `idx`. No-op if out of bounds.
@@ -381,4 +491,33 @@ mod tests {
     // Tunnel creation tests require an actual SSH server, so we only test
     // the manager state logic here. The spec-level tests cover argument
     // generation in `prt_core::core::ssh_tunnel`.
+
+    #[test]
+    fn shell_quote_leaves_safe_args_untouched() {
+        assert_eq!(shell_quote("-L"), "-L");
+        assert_eq!(shell_quote("8080:localhost:80"), "8080:localhost:80");
+        assert_eq!(
+            shell_quote("/home/user/.ssh/id_rsa"),
+            "/home/user/.ssh/id_rsa"
+        );
+        assert_eq!(shell_quote("user@host"), "user@host");
+    }
+
+    #[test]
+    fn shell_quote_wraps_paths_with_spaces() {
+        assert_eq!(
+            shell_quote("/Users/x/my keys/id_rsa"),
+            "'/Users/x/my keys/id_rsa'"
+        );
+    }
+
+    #[test]
+    fn shell_quote_escapes_embedded_single_quote() {
+        assert_eq!(shell_quote("a'b"), "'a'\\''b'");
+    }
+
+    #[test]
+    fn shell_quote_quotes_empty_arg() {
+        assert_eq!(shell_quote(""), "''");
+    }
 }
