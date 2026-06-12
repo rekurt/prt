@@ -136,11 +136,15 @@ impl SshTunnel {
                     // came up (an unreachable host keeps `ssh` alive for a few
                     // seconds before TCP timeout). Reset the backoff here rather
                     // than on respawn so the exponential growth survives a host
-                    // that flaps every few seconds.
+                    // that flaps every few seconds. Also re-arm `auto_reconnect`:
+                    // if the give-up at `MAX_RECONNECT_ATTEMPTS` happened to land
+                    // on an attempt that actually recovered, a now-healthy tunnel
+                    // must be eligible to reconnect again if it later drops.
                     if self.started_at.elapsed() >= STABILITY_THRESHOLD {
                         self.retry_backoff = INITIAL_BACKOFF;
                         self.retry_count = 0;
                         self.next_retry_at = None;
+                        self.auto_reconnect = true;
                     }
                     TunnelStatus::Alive
                 }
