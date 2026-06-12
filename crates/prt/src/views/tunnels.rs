@@ -5,8 +5,33 @@ use crate::forward::TunnelStatus;
 use crossterm::event::{KeyCode, KeyEvent};
 use prt_core::core::ssh_tunnel::TunnelKind;
 use prt_core::i18n;
+use prt_core::model::ConnectionState;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
+use std::time::Duration;
+
+/// Compact uptime: `45s`, `12m`, `3h04m`, `2d05h`.
+fn fmt_uptime(d: Duration) -> String {
+    let secs = d.as_secs();
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else if secs < 86_400 {
+        format!("{}h{:02}m", secs / 3600, (secs % 3600) / 60)
+    } else {
+        format!("{}d{:02}h", secs / 86_400, (secs % 86_400) / 3600)
+    }
+}
+
+/// True if a local listener is currently bound to `local_port` in the latest
+/// scan — confirms an `Alive` tunnel actually opened its socket. Read-only:
+/// reuses the data prt already scanned, opens no new connections.
+fn has_local_listener(app: &App, local_port: u16) -> bool {
+    app.session.entries.iter().any(|e| {
+        e.entry.state == ConnectionState::Listen && e.entry.local_addr.port() == local_port
+    })
+}
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let s = i18n::strings();
@@ -32,6 +57,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         Cell::from(s.tunnel_col_local),
         Cell::from(s.tunnel_col_remote),
         Cell::from(s.tunnel_col_host),
+        Cell::from(s.tunnel_col_uptime),
         Cell::from(s.tunnel_col_status),
     ])
     .style(
@@ -61,10 +87,26 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 ),
                 TunnelKind::Dynamic => "(SOCKS5)".into(),
             };
+            // Status, with a listener health check layered on top: an `Alive`
+            // ssh child whose local port isn't actually being listened on is a
+            // common sign of a broken `-D`/`-L` (e.g. bind failure), so surface
+            // it as a yellow warning rather than a misleading green "alive".
             let (status, color) = match t.last_status {
-                TunnelStatus::Alive => (s.tunnel_status_alive, Color::Green),
-                TunnelStatus::Starting => (s.tunnel_status_starting, Color::Yellow),
-                TunnelStatus::Failed => (s.tunnel_status_failed, Color::Red),
+                TunnelStatus::Alive => {
+                    if has_local_listener(app, t.spec.local_port) {
+                        (s.tunnel_status_alive.to_string(), Color::Green)
+                    } else {
+                        (s.tunnel_health_no_listener.to_string(), Color::Yellow)
+                    }
+                }
+                TunnelStatus::Starting => (s.tunnel_status_starting.to_string(), Color::Yellow),
+                TunnelStatus::Failed => (s.tunnel_status_failed.to_string(), Color::Red),
+            };
+
+            // Uptime is only meaningful while the child is running.
+            let uptime = match t.last_status {
+                TunnelStatus::Failed => "-".to_string(),
+                _ => fmt_uptime(t.uptime()),
             };
 
             Row::new(vec![
@@ -73,6 +115,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 Cell::from(local),
                 Cell::from(remote),
                 Cell::from(t.spec.host_alias.clone()),
+                Cell::from(uptime),
                 Cell::from(status).style(Style::default().fg(color)),
             ])
         })
@@ -85,6 +128,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         Constraint::Fill(1),
         Constraint::Length(16),
         Constraint::Length(8),
+        Constraint::Length(12),
     ];
     let table = Table::new(rows, widths)
         .header(header)
@@ -137,6 +181,10 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
         }
         KeyCode::Char('r') => {
             app.restart_selected_tunnel();
+            true
+        }
+        KeyCode::Char('c') => {
+            app.copy_selected_tunnel_command();
             true
         }
         KeyCode::Char('s') => {

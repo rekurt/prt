@@ -7,7 +7,7 @@ use prt_core::core::ssh_config::{SshHost, SshHostSource};
 use prt_core::core::ssh_tunnel::{ResolvedHost, SshTunnelSpec, TunnelKind};
 use std::process::{Child, Command, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Lifecycle status of a tunnel, refreshed on each `cleanup()` tick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -25,6 +25,8 @@ pub struct SshTunnel {
     args: Vec<String>,
     child: Child,
     pub last_status: TunnelStatus,
+    /// When the current `ssh` child was spawned — reset on `restart()`.
+    started_at: Instant,
 }
 
 impl SshTunnel {
@@ -39,6 +41,7 @@ impl SshTunnel {
             args,
             child,
             last_status: TunnelStatus::Starting,
+            started_at: Instant::now(),
         })
     }
 
@@ -62,6 +65,7 @@ impl SshTunnel {
             args,
             child,
             last_status: TunnelStatus::Starting,
+            started_at: Instant::now(),
         })
     }
 
@@ -113,7 +117,24 @@ impl SshTunnel {
         self.kill();
         self.child = spawn_ssh_args(&self.args)?;
         self.last_status = TunnelStatus::Starting;
+        self.started_at = Instant::now();
         Ok(())
+    }
+
+    /// How long the current `ssh` child has been running.
+    pub fn uptime(&self) -> Duration {
+        self.started_at.elapsed()
+    }
+
+    /// The full `ssh` command line this tunnel was spawned with — handy for
+    /// copying to the clipboard and reproducing the tunnel outside prt.
+    pub fn command_string(&self) -> String {
+        let mut cmd = String::from("ssh");
+        for arg in &self.args {
+            cmd.push(' ');
+            cmd.push_str(arg);
+        }
+        cmd
     }
 }
 
