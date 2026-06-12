@@ -2,6 +2,11 @@
 //!
 //! Provides a compile-time lookup table for ~170 common ports.
 //! User overrides from `~/.config/prt/config.toml` take precedence.
+//!
+//! NOTE: the proxy/SOCKS ports here are for *display* naming only. The
+//! suspicious-listener heuristic uses its own intentionally narrower list,
+//! `crate::core::suspicious::PROXY_PORTS` — adding a proxy port here does not
+//! automatically flag it as suspicious.
 
 use std::collections::HashMap;
 
@@ -77,6 +82,7 @@ fn builtin_lookup(port: u16) -> Option<&'static str> {
 
         // ── Common registered ports ──────────────────────────────
         1080 => Some("socks"),
+        1081 => Some("socks"),
         1194 => Some("openvpn"),
         1433 => Some("mssql"),
         1434 => Some("mssql-m"),
@@ -160,11 +166,13 @@ fn builtin_lookup(port: u16) -> Option<&'static str> {
         9000 => Some("php-fpm"),
         9042 => Some("cassandra"),
         9043 => Some("websphere"),
+        9050 => Some("tor-socks"),
         9090 => Some("prometheus"),
         9091 => Some("transmsn"),
         9092 => Some("kafka"),
         9093 => Some("alertmgr"),
         9100 => Some("node-exp"),
+        9150 => Some("tor-socks"),
         9160 => Some("cassandra"),
         9200 => Some("elastic"),
         9300 => Some("elastic"),

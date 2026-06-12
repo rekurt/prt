@@ -1180,6 +1180,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
                     items.push(("e", s.hint_edit_tunnel));
                     items.push(("K", s.hint_kill_tunnel));
                     items.push(("r", s.hint_restart_tunnel));
+                    items.push(("c", s.hint_copy_tunnel));
                     items.push(("s", s.hint_save_tunnels));
                 }
             }

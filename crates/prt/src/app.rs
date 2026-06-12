@@ -258,6 +258,19 @@ impl App {
         }
     }
 
+    /// Copy the `ssh` command line of the selected tunnel to the clipboard.
+    pub fn copy_selected_tunnel_command(&mut self) {
+        let idx = match self.clamp_tunnels_selected() {
+            Some(i) => i,
+            None => return,
+        };
+        let cmd = match self.forwards.tunnels.get(idx) {
+            Some(t) => t.command_string(),
+            None => return,
+        };
+        self.copy_to_clipboard(&cmd);
+    }
+
     /// Persist the current set of active tunnels to the user's config file.
     /// Failed tunnels are pruned first so the on-disk config stays clean.
     pub fn save_tunnels(&mut self) {
@@ -559,8 +572,10 @@ pub fn run() -> Result<()> {
             }
         }
 
-        // Cleanup dead tunnels
+        // Refresh tunnel statuses, then auto-reconnect any that died on their
+        // own (with backoff, so an unreachable host isn't hammered).
         app.forwards.cleanup();
+        app.forwards.reconnect_failed();
 
         if last_tick.elapsed() >= TICK_RATE {
             if !app.auto_refresh_paused {

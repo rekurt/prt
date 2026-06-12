@@ -180,6 +180,8 @@ pub enum SuspiciousReason {
     ScriptOnSensitive,
     /// Root process making outgoing connection to a high port.
     RootHighPortOutgoing,
+    /// Process listening on a well-known SOCKS/proxy port (1080, 9050, …).
+    ProxyListening,
 }
 
 /// Column by which the port table can be sorted.
