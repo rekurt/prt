@@ -148,6 +148,7 @@ pub static STRINGS: Strings = Strings {
     tunnel_status_starting: "启动中",
     tunnel_status_failed: "失败",
     tunnel_health_no_listener: "无监听",
+    tunnel_health_flapping: "监听抖动",
     tunnel_form_edit_title: " 编辑 SSH 隧道 ",
     tunnel_form_field_required: "必填",
     tunnels_empty: "  无活跃隧道。按 [n] 创建。",

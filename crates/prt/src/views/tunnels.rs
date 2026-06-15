@@ -1,38 +1,13 @@
 //! Fullscreen SSH tunnels manager.
 
-use crate::app::App;
+use crate::app::{entry_has_listener, App, LISTENER_GRACE};
 use crate::forward::TunnelStatus;
 use crossterm::event::{KeyCode, KeyEvent};
 use prt_core::core::scanner::format_uptime;
 use prt_core::core::ssh_tunnel::TunnelKind;
 use prt_core::i18n;
-use prt_core::model::{ConnectionState, TICK_RATE};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
-use std::time::Duration;
-
-/// Grace period after (re)start before a missing listener is reported. The scan
-/// backing `has_local_listener` only refreshes every `TICK_RATE`, and a tunnel
-/// needs a tick to go `Starting -> Alive` plus another for the scan to observe
-/// its `LISTEN` socket, so we'd otherwise flash a bogus "no listener".
-const LISTENER_GRACE: Duration = TICK_RATE.saturating_mul(2);
-
-/// True if `ssh_pid` owns a `LISTEN` socket on `local_port` in the latest scan
-/// — confirms an `Alive` tunnel actually opened its own socket. Read-only:
-/// reuses the data prt already scanned, opens no new connections.
-///
-/// The PID match matters: OpenSSH defaults to `ExitOnForwardFailure no`, so on
-/// a local-port conflict the `ssh` child keeps running while *another* process
-/// owns the port. Matching `LISTEN + port` alone would then mask the bind
-/// failure as healthy; requiring the listener's PID to be our `ssh` child
-/// avoids that false green.
-fn has_local_listener(app: &App, local_port: u16, ssh_pid: u32) -> bool {
-    app.session.entries.iter().any(|e| {
-        e.entry.state == ConnectionState::Listen
-            && e.entry.local_addr.port() == local_port
-            && e.entry.process.pid == ssh_pid
-    })
-}
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let s = i18n::strings();
@@ -104,10 +79,17 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             let (status, color) = match t.last_status {
                 TunnelStatus::Alive => {
                     let scan_can_confirm = !app.auto_refresh_paused && t.uptime() >= LISTENER_GRACE;
-                    if !scan_can_confirm || has_local_listener(app, t.spec.local_port, t.pid()) {
-                        (s.tunnel_status_alive.to_string(), Color::Green)
-                    } else {
+                    let present =
+                        entry_has_listener(&app.session.entries, t.spec.local_port, t.pid());
+                    if scan_can_confirm && !present {
+                        // Listener gone right now — the acute case wins.
                         (s.tunnel_health_no_listener.to_string(), Color::Yellow)
+                    } else if scan_can_confirm && t.is_flapping() {
+                        // Listener present now but intermittently dropped across
+                        // recent scans — degrading rather than broken.
+                        (s.tunnel_health_flapping.to_string(), Color::LightYellow)
+                    } else {
+                        (s.tunnel_status_alive.to_string(), Color::Green)
                     }
                 }
                 TunnelStatus::Starting => (s.tunnel_status_starting.to_string(), Color::Yellow),

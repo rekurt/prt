@@ -255,6 +255,7 @@ pub struct Strings {
     pub tunnel_status_starting: &'static str,
     pub tunnel_status_failed: &'static str,
     pub tunnel_health_no_listener: &'static str,
+    pub tunnel_health_flapping: &'static str,
     pub tunnel_form_edit_title: &'static str,
     pub tunnel_form_field_required: &'static str,
     pub tunnels_empty: &'static str,
