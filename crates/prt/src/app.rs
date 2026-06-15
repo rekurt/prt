@@ -26,7 +26,7 @@ use std::time::Instant;
 use crate::forward::TunnelStatus;
 use crate::input::handle_key;
 use crate::ui::draw;
-use prt_core::model::ConnectionState;
+use prt_core::model::{ConnectionState, EntryStatus};
 use std::time::Duration;
 
 /// Grace period after a tunnel (re)starts before its missing listener is held
@@ -46,9 +46,16 @@ pub(crate) const LISTENER_GRACE: Duration = TICK_RATE.saturating_mul(2);
 /// owns the port. Matching `LISTEN + port` alone would then mask the bind
 /// failure as healthy; requiring the listener's PID to be our `ssh` child
 /// avoids that false green.
+///
+/// `Gone` entries are excluded: `diff_entries` keeps a vanished `LISTEN` socket
+/// in `entries` (as `EntryStatus::Gone`) for `GONE_RETENTION` before removal, so
+/// counting it as present would hide a short listener drop — exactly the flap
+/// this signal exists to catch — and keep the binary "no listener" check green
+/// for up to 5s after the socket actually died.
 pub(crate) fn entry_has_listener(entries: &[TrackedEntry], local_port: u16, ssh_pid: u32) -> bool {
     entries.iter().any(|e| {
-        e.entry.state == ConnectionState::Listen
+        e.status != EntryStatus::Gone
+            && e.entry.state == ConnectionState::Listen
             && e.entry.local_addr.port() == local_port
             && e.entry.process.pid == ssh_pid
     })
