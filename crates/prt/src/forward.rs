@@ -5,6 +5,7 @@
 
 use prt_core::core::ssh_config::{SshHost, SshHostSource};
 use prt_core::core::ssh_tunnel::{ResolvedHost, SshTunnelSpec, TunnelKind};
+use std::collections::VecDeque;
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -36,6 +37,33 @@ const STABILITY_THRESHOLD: Duration = Duration::from_secs(30);
 /// remove it and lets the user restart it manually.
 const MAX_RECONNECT_ATTEMPTS: u32 = 10;
 
+/// How many recent listener-presence observations to keep per tunnel for
+/// flapping detection. Each sample covers one full scan (~`TICK_RATE`), so a
+/// window of 6 spans roughly the last ~12s of confirmable scans.
+const LISTENER_HISTORY_CAP: usize = 6;
+/// Minimum samples before the flapping verdict is trusted — avoids flagging a
+/// tunnel as unstable off a single good/bad sample pair right after it starts
+/// being observed.
+const LISTENER_MIN_SAMPLES: usize = 4;
+
+/// Push one listener-presence sample, evicting the oldest once the window is
+/// full. Free function (rather than inline in `record_listener`) so the
+/// capping behaviour is unit-testable without spawning an `ssh` child.
+fn push_listener_sample(history: &mut VecDeque<bool>, present: bool) {
+    history.push_back(present);
+    if history.len() > LISTENER_HISTORY_CAP {
+        history.pop_front();
+    }
+}
+
+/// True when the observation window holds *both* a present and an absent
+/// listener sample (and enough samples to be meaningful): the listener is
+/// coming and going across scans rather than being stably up or stably down.
+/// A pure predicate so it can be unit-tested without spawning an `ssh` child.
+fn history_is_flapping(history: &VecDeque<bool>) -> bool {
+    history.len() >= LISTENER_MIN_SAMPLES && history.contains(&true) && history.contains(&false)
+}
+
 /// A single SSH tunnel: a running `ssh` child process plus the spec and
 /// resolved argument list (kept so `restart()` reuses the same resolution).
 pub struct SshTunnel {
@@ -57,6 +85,12 @@ pub struct SshTunnel {
     /// Earliest instant the next reconnect attempt may run. `None` once the
     /// tunnel is healthy or no retry has been scheduled yet.
     next_retry_at: Option<Instant>,
+    /// Recent listener-presence observations (newest at the back, capped at
+    /// `LISTENER_HISTORY_CAP`). Only confirmable scans are pushed here (not
+    /// while paused or within the startup grace window), so a mix of `true`
+    /// and `false` genuinely means the local `LISTEN` socket flapped. Cleared
+    /// on `respawn` so a restarted tunnel starts with a clean slate.
+    listener_history: VecDeque<bool>,
 }
 
 impl SshTunnel {
@@ -73,6 +107,7 @@ impl SshTunnel {
             retry_backoff: INITIAL_BACKOFF,
             retry_count: 0,
             next_retry_at: None,
+            listener_history: VecDeque::with_capacity(LISTENER_HISTORY_CAP),
         }
     }
 
@@ -177,6 +212,8 @@ impl SshTunnel {
         };
         self.last_status = TunnelStatus::Starting;
         self.started_at = Instant::now();
+        // The old child's listener history says nothing about the new one.
+        self.listener_history.clear();
         Ok(())
     }
 
@@ -196,6 +233,22 @@ impl SshTunnel {
     /// How long the current `ssh` child has been running.
     pub fn uptime(&self) -> Duration {
         self.started_at.elapsed()
+    }
+
+    /// Record one listener-presence observation from a confirmable scan,
+    /// evicting the oldest sample once the window is full. Callers must only
+    /// invoke this when the scan can be trusted (auto-refresh running and past
+    /// the startup grace window); a stale or premature `false` would otherwise
+    /// manufacture a phantom flap.
+    pub fn record_listener(&mut self, present: bool) {
+        push_listener_sample(&mut self.listener_history, present);
+    }
+
+    /// True when the local listener has been intermittently present across
+    /// recent scans — a "degrading slowly" signal distinct from the binary
+    /// "no listener" (a listener that is gone *right now*).
+    pub fn is_flapping(&self) -> bool {
+        history_is_flapping(&self.listener_history)
     }
 
     /// PID of the current `ssh` child. For `-L`/`-D` tunnels this is the
@@ -530,5 +583,56 @@ mod tests {
     #[test]
     fn shell_quote_quotes_empty_arg() {
         assert_eq!(shell_quote(""), "''");
+    }
+
+    fn history(samples: &[bool]) -> VecDeque<bool> {
+        let mut h = VecDeque::new();
+        for &s in samples {
+            push_listener_sample(&mut h, s);
+        }
+        h
+    }
+
+    #[test]
+    fn stable_present_is_not_flapping() {
+        assert!(!history_is_flapping(&history(&[
+            true, true, true, true, true, true
+        ])));
+    }
+
+    #[test]
+    fn all_absent_is_not_flapping() {
+        assert!(!history_is_flapping(&history(&[
+            false, false, false, false, false, false
+        ])));
+    }
+
+    #[test]
+    fn alternating_presence_is_flapping() {
+        assert!(history_is_flapping(&history(&[true, false, true, false])));
+    }
+
+    #[test]
+    fn insufficient_samples_is_not_flapping() {
+        // Both values present, but fewer than LISTENER_MIN_SAMPLES samples.
+        assert!(!history_is_flapping(&history(&[true, false])));
+    }
+
+    #[test]
+    fn empty_history_is_not_flapping() {
+        assert!(!history_is_flapping(&VecDeque::new()));
+    }
+
+    #[test]
+    fn window_caps_and_evicts_old_samples() {
+        // Fill with absences, then push enough presences to roll the absences
+        // out: a once-flapping window settles back to stably-up.
+        let mut h = history(&[false, false, false, false, false, false]);
+        assert!(!history_is_flapping(&h)); // all absent
+        for _ in 0..LISTENER_HISTORY_CAP {
+            push_listener_sample(&mut h, true);
+        }
+        assert_eq!(h.len(), LISTENER_HISTORY_CAP);
+        assert!(!history_is_flapping(&h)); // absences evicted, now stably up
     }
 }

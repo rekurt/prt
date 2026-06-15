@@ -23,8 +23,36 @@ use ratatui::prelude::*;
 use std::io::stdout;
 use std::time::Instant;
 
+use crate::forward::TunnelStatus;
 use crate::input::handle_key;
 use crate::ui::draw;
+use prt_core::model::ConnectionState;
+use std::time::Duration;
+
+/// Grace period after a tunnel (re)starts before its missing listener is held
+/// against it. The scan backing the listener check only refreshes every
+/// `TICK_RATE`, and a tunnel needs a tick to go `Starting -> Alive` plus
+/// another for the scan to observe its `LISTEN` socket. Shared by the recorder
+/// here and the renderer in `views::tunnels` so both agree on when a scan is
+/// trustworthy.
+pub(crate) const LISTENER_GRACE: Duration = TICK_RATE.saturating_mul(2);
+
+/// True if `ssh_pid` owns a `LISTEN` socket on `local_port` in the given scan
+/// — confirms an `Alive` tunnel actually opened its own socket. Read-only:
+/// reuses the data prt already scanned, opens no new connections.
+///
+/// The PID match matters: OpenSSH defaults to `ExitOnForwardFailure no`, so on
+/// a local-port conflict the `ssh` child keeps running while *another* process
+/// owns the port. Matching `LISTEN + port` alone would then mask the bind
+/// failure as healthy; requiring the listener's PID to be our `ssh` child
+/// avoids that false green.
+pub(crate) fn entry_has_listener(entries: &[TrackedEntry], local_port: u16, ssh_pid: u32) -> bool {
+    entries.iter().any(|e| {
+        e.entry.state == ConnectionState::Listen
+            && e.entry.local_addr.port() == local_port
+            && e.entry.process.pid == ssh_pid
+    })
+}
 
 #[derive(Clone, Copy)]
 pub(crate) enum SudoPurpose {
@@ -305,6 +333,18 @@ impl App {
                 .any(|entry| entry.entry.process.pid == *pid)
             {
                 self.detail_cache = None;
+            }
+        }
+        // Record one listener-presence observation per scan for flapping
+        // detection. Only `Alive` tunnels past the grace window are sampled, so
+        // the history never holds a phantom `false` from a freshly (re)started
+        // tunnel the scan hasn't observed yet. `refresh()` runs only while
+        // auto-refresh is active, so the scan here is always fresh.
+        let entries = &self.session.entries;
+        for t in &mut self.forwards.tunnels {
+            if t.last_status == TunnelStatus::Alive && t.uptime() >= LISTENER_GRACE {
+                let present = entry_has_listener(entries, t.spec.local_port, t.pid());
+                t.record_listener(present);
             }
         }
         self.update_filtered_preserving(prev_key);

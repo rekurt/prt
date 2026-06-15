@@ -149,6 +149,7 @@ pub static STRINGS: Strings = Strings {
     tunnel_status_starting: "запускается",
     tunnel_status_failed: "сбой",
     tunnel_health_no_listener: "нет листенера",
+    tunnel_health_flapping: "нестабилен",
     tunnel_form_edit_title: " Правка SSH-туннеля ",
     tunnel_form_field_required: "обязательно",
     tunnels_empty: "  Активных туннелей нет. Нажмите [n] чтобы создать.",

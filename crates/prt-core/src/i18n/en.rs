@@ -149,6 +149,7 @@ pub static STRINGS: Strings = Strings {
     tunnel_status_starting: "starting",
     tunnel_status_failed: "failed",
     tunnel_health_no_listener: "no listener",
+    tunnel_health_flapping: "flapping",
     tunnel_form_edit_title: " Edit SSH Tunnel ",
     tunnel_form_field_required: "required",
     tunnels_empty: "  No active tunnels. Press [n] to create one.",
