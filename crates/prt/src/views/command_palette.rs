@@ -13,7 +13,7 @@ pub struct CommandPalette {
 
 #[derive(Debug, Clone, Copy)]
 struct Command {
-    label: &'static str,
+    english_alias: &'static str,
     action: CommandAction,
 }
 
@@ -34,50 +34,68 @@ enum CommandAction {
 
 const COMMANDS: &[Command] = &[
     Command {
-        label: "refresh",
+        english_alias: "refresh",
         action: CommandAction::Refresh,
     },
     Command {
-        label: "pause",
+        english_alias: "pause",
         action: CommandAction::TogglePause,
     },
     Command {
-        label: "clear filter",
+        english_alias: "clear filter",
         action: CommandAction::ClearFilter,
     },
     Command {
-        label: "connections",
+        english_alias: "connections",
         action: CommandAction::Connections,
     },
     Command {
-        label: "processes",
+        english_alias: "processes",
         action: CommandAction::Processes,
     },
     Command {
-        label: "ssh",
+        english_alias: "ssh",
         action: CommandAction::Ssh,
     },
     Command {
-        label: "tunnels",
+        english_alias: "tunnels",
         action: CommandAction::Tunnels,
     },
     Command {
-        label: "kill",
+        english_alias: "kill",
         action: CommandAction::Kill,
     },
     Command {
-        label: "copy pid",
+        english_alias: "copy pid",
         action: CommandAction::CopyPid,
     },
     Command {
-        label: "trace",
+        english_alias: "trace",
         action: CommandAction::Trace,
     },
     Command {
-        label: "block",
+        english_alias: "block",
         action: CommandAction::Block,
     },
 ];
+
+impl Command {
+    fn label(self, s: &'static i18n::Strings) -> &'static str {
+        match self.action {
+            CommandAction::Refresh => s.command_refresh,
+            CommandAction::TogglePause => s.command_pause,
+            CommandAction::ClearFilter => s.command_clear_filter,
+            CommandAction::Connections => s.section_connections,
+            CommandAction::Processes => s.section_processes,
+            CommandAction::Ssh => s.section_ssh,
+            CommandAction::Tunnels => s.view_tunnels,
+            CommandAction::Kill => s.action_kill,
+            CommandAction::CopyPid => s.action_copy_pid,
+            CommandAction::Trace => s.action_trace,
+            CommandAction::Block => s.action_block,
+        }
+    }
+}
 
 pub fn open(app: &mut App) {
     app.command_palette = Some(CommandPalette::default());
@@ -98,7 +116,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
             palette.selected = palette.selected.saturating_sub(1);
         }
         KeyCode::Down => {
-            let count = matching_commands(&palette.input).len();
+            let count = matching_commands(&palette.input, i18n::strings()).len();
             if count > 0 {
                 palette.selected = (palette.selected + 1).min(count - 1);
             }
@@ -110,7 +128,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> bool {
         KeyCode::Enter => {
             let input = palette.input.clone();
             let selected = palette.selected;
-            let command = matching_commands(&input).get(selected).copied();
+            let command = matching_commands(&input, i18n::strings())
+                .get(selected)
+                .copied();
             app.command_palette = None;
             if let Some(command) = command {
                 execute(app, command.action);
@@ -150,7 +170,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         Span::styled("\u{2588}", Style::default().fg(Color::White)),
     ])];
 
-    let matches = matching_commands(&palette.input);
+    let matches = matching_commands(&palette.input, s);
     if matches.is_empty() {
         lines.push(Line::from(Span::styled(
             s.command_palette_empty,
@@ -168,7 +188,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                 Style::default()
             };
             lines.push(Line::from(Span::styled(
-                format!(" {}", command.label),
+                format!(" {}", command.label(s)),
                 style,
             )));
         }
@@ -177,12 +197,16 @@ pub fn draw(f: &mut Frame, app: &App) {
     f.render_widget(Paragraph::new(lines), inner);
 }
 
-fn matching_commands(input: &str) -> Vec<Command> {
+fn matching_commands(input: &str, s: &'static i18n::Strings) -> Vec<Command> {
     let needle = input.trim().to_lowercase();
     COMMANDS
         .iter()
         .copied()
-        .filter(|command| needle.is_empty() || command.label.contains(&needle))
+        .filter(|command| {
+            needle.is_empty()
+                || command.label(s).to_lowercase().contains(&needle)
+                || command.english_alias.contains(&needle)
+        })
         .collect()
 }
 
@@ -223,14 +247,48 @@ fn execute(app: &mut App, action: CommandAction) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static LANG_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn matching_commands_filters_by_substring() {
-        let labels: Vec<_> = matching_commands("tun")
+        let _guard = LANG_TEST_LOCK.lock().unwrap();
+        i18n::set_lang(i18n::Lang::En);
+        let s = i18n::strings();
+        let labels: Vec<_> = matching_commands("tun", s)
             .into_iter()
-            .map(|command| command.label)
+            .map(|command| command.label(s))
             .collect();
-        assert_eq!(labels, vec!["tunnels"]);
+        assert_eq!(labels, vec!["Tunnels"]);
+    }
+
+    #[test]
+    fn command_labels_and_search_follow_active_language() {
+        let _guard = LANG_TEST_LOCK.lock().unwrap();
+        i18n::set_lang(i18n::Lang::Ru);
+        let s = i18n::strings();
+        let labels: Vec<_> = matching_commands("тун", s)
+            .into_iter()
+            .map(|command| command.label(s))
+            .collect();
+        assert_eq!(labels, vec!["Туннели"]);
+
+        let labels: Vec<_> = matching_commands("очистить", s)
+            .into_iter()
+            .map(|command| command.label(s))
+            .collect();
+        assert_eq!(labels, vec!["Очистить фильтр"]);
+
+        i18n::set_lang(i18n::Lang::Zh);
+        let s = i18n::strings();
+        let labels: Vec<_> = matching_commands("刷新", s)
+            .into_iter()
+            .map(|command| command.label(s))
+            .collect();
+        assert_eq!(labels, vec!["刷新"]);
+
+        i18n::set_lang(i18n::Lang::En);
     }
 
     #[test]
