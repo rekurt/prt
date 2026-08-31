@@ -30,7 +30,7 @@ Network port monitor with TUI interface (ratatui) for macOS and Linux. Workspace
 - `PortEntry` is the core data type; `TrackedEntry` wraps it with status (New/Unchanged/Gone), timestamp, and enrichment fields (first_seen, suspicious, container_name, service_name)
 - Entry identity key is `(port, pid)` tuple — used in `diff_entries()` and focus stability (selection tracks by identity, not index)
 - `Session` struct encapsulates the refresh/diff/retain/sort cycle — shared logic that UI delegates to
-- `ViewMode` enum controls fullscreen views (Table/Chart/Topology/ProcessDetail/Namespaces); `DetailTab` enum controls bottom panel tabs (Tree/Interface/Connection)
+- `ViewMode` is the top-level section: `Connections` / `Processes` / `Ssh` (Tab/Shift+Tab cycles). `ProcessesTab` and `SshTab` drive sub-tabs (`[` / `]`). The bottom Details panel under Connections is a single unified view (no tabs). Discrete actions live in the `Space`-key `ActionItem` menu.
 - `ExportFormat` in core has no clap dependency; binary crate wraps it with `clap::ValueEnum`
 - Gone entries are retained for 5 seconds before removal; auto-refresh every 2 seconds
 - Config from `~/.config/prt/config.toml` — optional, missing file = defaults, parse error = stderr warning + defaults

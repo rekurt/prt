@@ -119,6 +119,9 @@ pub static STRINGS: Strings = Strings {
     action_unavailable_no_remote: "no remote address",
     command_palette_title: "Command",
     command_palette_empty: "no commands",
+    command_refresh: "refresh",
+    command_pause: "pause",
+    command_clear_filter: "clear filter",
 
     esc_again_to_clear_filter: "Esc again to clear filter",
     esc_again_to_discard_form: "Esc again to discard changes",

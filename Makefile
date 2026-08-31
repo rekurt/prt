@@ -1,10 +1,10 @@
 # prt — Network Port Monitor
 # Usage: make [target]
 
-VERSION := $(shell grep '^version' crates/prt/Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+VERSION := $(shell sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
 
-.PHONY: all build test bench lint fmt check doc clean install run help \
-        publish publish-core publish-prt tag release
+.PHONY: all build release test bench lint fmt check doc clean install run help \
+        publish publish-core publish-prt publish-release tag
 
 # Default target
 all: check test
@@ -116,7 +116,7 @@ tag:
 	git push origin "v$(VERSION)"
 
 ## Full release: check → publish → tag → GitHub release
-release: check
+publish-release: check
 	$(MAKE) publish
 	$(MAKE) tag
 	@echo ""
@@ -165,4 +165,4 @@ help:
 	@echo "  make publish-dry   Dry-run publish (verify packaging)"
 	@echo "  make publish       Publish all crates to crates.io"
 	@echo "  make tag           Create and push git tag v$(VERSION)"
-	@echo "  make release       Full release: check + publish + tag"
+	@echo "  make publish-release  Full release: check + publish + tag"

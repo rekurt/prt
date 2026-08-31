@@ -119,6 +119,9 @@ pub static STRINGS: Strings = Strings {
     action_unavailable_no_remote: "无远程地址",
     command_palette_title: "命令",
     command_palette_empty: "无命令",
+    command_refresh: "刷新",
+    command_pause: "暂停",
+    command_clear_filter: "清除筛选",
 
     esc_again_to_clear_filter: "再按 Esc 清除过滤",
     esc_again_to_discard_form: "再按 Esc 放弃更改",

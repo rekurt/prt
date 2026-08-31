@@ -119,6 +119,9 @@ pub static STRINGS: Strings = Strings {
     action_unavailable_no_remote: "нет удалённого адреса",
     command_palette_title: "Команда",
     command_palette_empty: "команд нет",
+    command_refresh: "Обновить",
+    command_pause: "Пауза",
+    command_clear_filter: "Очистить фильтр",
 
     esc_again_to_clear_filter: "Esc ещё раз — стереть фильтр",
     esc_again_to_discard_form: "Esc ещё раз — отменить изменения",

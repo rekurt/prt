@@ -235,6 +235,15 @@ fn sort_indicator(app: &App, col: SortColumn) -> &'static str {
     }
 }
 
+fn format_port_with_status(port: u16, status: EntryStatus) -> String {
+    let marker = match status {
+        EntryStatus::New => "+",
+        EntryStatus::Unchanged => " ",
+        EntryStatus::Gone => "−",
+    };
+    format!("{marker} {port}")
+}
+
 // ── Entry style (row coloring) ───────────────────────────────────
 
 /// Compute the row style based on entry status and connection aging.
@@ -382,7 +391,10 @@ fn draw_table(f: &mut Frame, app: &App, area: Rect) {
                 style = style.bg(Color::DarkGray);
             }
 
-            let mut cells = vec![Cell::from(e.entry.local_port().to_string())];
+            let mut cells = vec![Cell::from(format_port_with_status(
+                e.entry.local_port(),
+                e.status,
+            ))];
             if wide {
                 cells.push(Cell::from(e.service_name.as_deref().unwrap_or("-")));
             }
@@ -1200,4 +1212,19 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     hint_accent(&mut hints, i18n::lang().label(), Color::Magenta);
 
     f.render_widget(Line::from(hints), area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn port_cell_includes_non_color_lifecycle_marker() {
+        assert_eq!(format_port_with_status(8080, EntryStatus::New), "+ 8080");
+        assert_eq!(
+            format_port_with_status(8080, EntryStatus::Unchanged),
+            "  8080"
+        );
+        assert_eq!(format_port_with_status(8080, EntryStatus::Gone), "− 8080");
+    }
 }

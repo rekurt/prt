@@ -221,6 +221,9 @@ pub struct Strings {
     pub action_unavailable_no_remote: &'static str,
     pub command_palette_title: &'static str,
     pub command_palette_empty: &'static str,
+    pub command_refresh: &'static str,
+    pub command_pause: &'static str,
+    pub command_clear_filter: &'static str,
 
     // Esc cascade hints
     pub esc_again_to_clear_filter: &'static str,
