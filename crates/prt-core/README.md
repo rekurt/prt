@@ -6,6 +6,8 @@
 
 Core library for [**prt**](https://crates.io/crates/prt) — a real-time network port monitor for macOS and Linux.
 
+This page documents the library crate. For installation, the terminal interface, keyboard controls, accessible demo alternatives, and CLI modes, see the [project README](https://github.com/rekurt/prt#readme).
+
 ## What it does
 
 `prt-core` provides platform-independent logic for:
@@ -80,7 +82,7 @@ for entry in &session.entries {
 
 | Module | Description |
 |--------|-------------|
-| `model` | Core types: PortEntry, TrackedEntry, ViewMode, DetailTab, SortState |
+| `model` | Core types: PortEntry, TrackedEntry, ViewMode, ProcessesTab, SshTab, ActionItem, SortState |
 | `core::scanner` | Scan, diff, sort, filter, export |
 | `core::session` | Refresh cycle state machine with enrichment pipeline |
 | `core::alerts` | Alert rule evaluation (port, process, state, connections_gt) |

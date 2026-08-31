@@ -2,366 +2,224 @@
 
 # prt
 
-**终端实时网络端口监控工具**
-
-<br>
-
-<img src="docs/prt.gif" alt="prt 演示" width="720">
-
-<br>
-<br>
+**在终端中实时查看哪些进程正在占用网络端口。**
 
 [![Crates.io](https://img.shields.io/crates/v/prt.svg)](https://crates.io/crates/prt)
-[![Downloads](https://img.shields.io/crates/d/prt.svg)](https://crates.io/crates/prt)
+[![下载量](https://img.shields.io/crates/d/prt.svg)](https://crates.io/crates/prt)
 [![CI](https://github.com/rekurt/prt/actions/workflows/ci.yml/badge.svg)](https://github.com/rekurt/prt/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
-[![docs.rs](https://docs.rs/prt-core/badge.svg)](https://docs.rs/prt-core)
+[![MIT 许可证](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![API 文档](https://docs.rs/prt-core/badge.svg)](https://docs.rs/prt-core)
 
-[English](README.md) | [Русский](README.ru.md) | [中文](README.zh.md)
+[English](README.md) · [Русский](README.ru.md) · [中文](README.zh.md)
 
 </div>
 
----
+`prt` 是一个完全由键盘操作的终端界面，用于在 macOS 和 Linux 上检查网络连接、查找端口冲突、查看进程详情以及管理 SSH 隧道。它提供实时连接表、过滤、变化追踪、进程拓扑、告警和适合脚本处理的输出格式。
 
-## 什么是 prt？
+## 演示
 
-`prt` 实时显示哪些进程占用了您机器上的网络端口。它是 `lsof -i` / `ss -tlnp` 的交互式替代品，支持颜色高亮、过滤和进程树。
+<p align="center">
+  <img src="docs/prt.gif" alt="prt 动画演示：实时连接、进程详情、网络拓扑、命令面板和上下文操作" width="960">
+</p>
 
-## 为什么选择 prt？
+13 秒动画会直接在 README 中播放。你也可以[查看静态画面](docs/prt-demo.png)或[阅读演示文字说明](docs/demo-transcript.md)。录制过程可通过 [`docs/demo.tape`](docs/demo.tape) 复现。
 
-传统工具 `lsof`、`ss` 和 `netstat` 只能给出静态快照，读到时已经过时。`prt` 提供**实时自动刷新的终端界面**，带变化追踪：
+## 快速开始
 
-- **实时查看连接变化** — 绿色 = 新连接，红色 = 正在关闭
-- **即时发现端口冲突** — 不再需要反复猜测 `lsof -i :8080`
-- **自动检测可疑连接** — 异常连接自动标记 `[!]`
-- **一键封锁恶意 IP** — 直接在 TUI 中通过防火墙封锁
-- **容器集成** — 查看 Docker/Podman 容器占用的端口
-- **即时系统调用追踪** — 无需离开 TUI 即可使用 strace/dtruss
-- **带宽监控** — 标题栏实时显示系统级吞吐量
-- **告警规则** — 端口开启或连接数超限时收到通知
+### 环境要求
 
-## prt vs lsof vs ss vs netstat
+- 使用 Cargo 安装时需要 Rust 1.75 或更高版本
+- macOS 10.15 或更高版本（使用系统自带的 `lsof`）
+- Linux，并已挂载 `/proc` 文件系统
+- 支持 UTF-8 的终端；窗口越宽，可显示的表格列越多
 
-| 功能 | `prt` | `lsof -i` | `ss -tlnp` | `netstat -tlnp` |
-|------|:-----:|:---------:|:----------:|:---------------:|
-| 实时自动刷新 | **是** | 否 | 否 | 否 |
-| 变化追踪（新建/关闭） | **是** | 否 | 否 | 否 |
-| 彩色输出 | **是** | 否 | 否 | 否 |
-| 交互式过滤 | **是** | 否 | 否 | 否 |
-| 进程树 | **是** | 否 | 否 | 否 |
-| 已知端口名称（170+） | **是** | 部分 | 部分 | 部分 |
-| 可疑连接检测 | **是** | 否 | 否 | 否 |
-| Docker/Podman 容器 | **是** | 否 | 否 | 否 |
-| 带宽监控 | **是** | 否 | 否 | 否 |
-| IP 封锁（防火墙） | **是** | 否 | 否 | 否 |
-| Strace/dtruss | **是** | 否 | 否 | 否 |
-| SSH 隧道 | **是** | 否 | 否 | 否 |
-| 告警规则（TOML 配置） | **是** | 否 | 否 | 否 |
-| 导出 JSON/CSV | **是** | 否 | 否 | 否 |
-| NDJSON 流式输出 | **是** | 否 | 否 | 否 |
-| 多语言（EN/RU/ZH） | **是** | 否 | 否 | 否 |
-| macOS + Linux | **是** | macOS/Linux | Linux | Linux |
-| 单文件二进制 | **是** | 系统自带 | 系统自带 | 系统自带 |
+### 安装并运行
 
-## 功能特性
-
-### 实时表格与变化追踪
-
-主界面以可排序、可过滤的表格显示所有活跃的网络连接。列包括：端口、服务名、协议、状态、PID、进程名、用户。新连接以**绿色**高亮；关闭的连接以**红色**淡出5秒后消失。每2秒自动刷新。
-
-### 已知端口数据库
-
-`Service` 列将常见端口号映射为可读名称 — http (80)、ssh (22)、postgres (5432) 等约170个。可在 `~/.config/prt/config.toml` 中覆盖或扩展：
-
-```toml
-[known_ports]
-3000 = "my-app"
-9090 = "prometheus"
-```
-
-### 连接老化追踪
-
-每个连接记录其 `first_seen` 时间戳。ESTABLISHED 连接超过1小时显示黄色，超过24小时显示红色。CLOSE_WAIT 始终显示红色，因为它们可能表示资源泄漏。
-
-### 可疑连接检测
-
-连接会被扫描异常情况并标记 `[!]`：
-
-- **非 root 使用特权端口** — 非 root 进程监听端口 < 1024
-- **脚本语言占用敏感端口** — Python、Perl、Ruby 或 Node.js 监听端口 22、80 或 443
-- **Root 外连高端口** — root 进程建立到远程端口 > 1024 的连接
-
-按 `/` 然后输入 `!` 可仅显示可疑条目。
-
-### 容器感知
-
-如果 Docker 或 Podman 正在运行，`Container` 列显示每个进程所属的容器名称。无容器时该列自动隐藏以节省空间。通过批量 `docker ps` + `docker inspect` 调用解析，超时时间为2秒。
-
-### 带宽估算
-
-标题栏显示系统全局网络吞吐量：`▼ 1.2 MB/s ▲ 340 KB/s`。Linux 上读取 `/proc/net/dev`，macOS 上读取 `netstat -ib`。速率按刷新周期间的差值计算。
-
-### 进程树
-
-按 `Enter` 或 `d` 打开详情面板，然后按 `1` 查看选中进程的完整父进程链（如 `launchd → nginx → worker`）。
-
-### 分区
-
-`Tab` / `Shift+Tab` 在三个顶级分区之间循环切换。当前分区在顶部高亮显示。
-
-| 分区 | 默认内容 | 子标签 (`[` / `]`) |
-|------|----------|--------------------|
-| **连接** | 端口表 + 底部详情面板 (`Enter` / `d` 切换) | — |
-| **进程** | 选中条目的进程详情 (CWD、CPU %、RSS、打开的文件、env、所有连接、进程树) | 详情 ⇄ 拓扑 |
-| **SSH** | 已保存的主机和活跃隧道集中在同一处 | 主机 ⇄ 隧道 |
-
-连接表下方的 **详情** 面板是单一统一视图，包含 bind 类型、网络接口、远程地址、状态、cmdline、相关端口和进程树 — 不需要切换标签。
-
-进程分区的 **拓扑** 子标签为整个工作集绘制 ASCII 树
-`进程 → :本地端口 → 远程`。
-
-可滚动的视图都支持 `j`/`k` 和 `g`/`G`。
-
-### 操作菜单 (`Space`)
-
-对选中条目的几乎所有操作都通过一个上下文相关的弹出菜单（按 `Space` 打开）完成：
-
-- **终止进程**（也可直接按 `K`）
-- **复制行**（也可直接按 `c`） / **复制 PID**
-- **封锁远程 IP** — `iptables -A INPUT -s <IP> -j DROP` (Linux) /
-  `pfctl -t prt_blocked -T add <IP>` (macOS)。状态栏显示撤销命令，需要 sudo。
-- **跟踪系统调用** — `strace -p <PID> -e trace=network -f` (Linux) 或
-  `dtruss -p <PID>` (macOS，需要禁用 SIP 或 root)。再次执行可分离。
-- **SSH 转发** — 打开隧道表单，可选择本地端口、远程目标和主机别名。
-
-菜单只显示对当前条目有效的操作 — 没有远程地址时不会显示「封锁」和「转发」。
-
-### SSH 分区
-
-`SSH` 集中了两个子标签：
-
-- **主机** — 来自 `~/.ssh/config` 和 `~/.config/prt/config.toml` 的 `[[ssh_hosts]]` 的只读列表。按 `Enter` 打开预填了别名的隧道表单。
-- **隧道** — 带实时状态的活跃隧道：🟢 活跃，🟡 启动中，🔴 失败（失败的隧道会保留在列表中直到处理）。
-  按键: `n` 新建 · `e` 编辑 · `K` 终止 · `r` 重启 · `s` 保存到配置。
-
-隧道表单支持**实时验证**（输入时不正确的字段变红）、**编辑模式**（`Enter` 替换现有隧道），并**防止意外关闭** — 在非空表单上按 `Esc` 需要在 1.5 秒内再次按 `Esc` 才会丢弃。
-
-### 告警规则
-
-在 `~/.config/prt/config.toml` 中定义规则：
-
-```toml
-[[alerts]]
-port = 22
-action = "bell"        # 新 SSH 连接时响铃
-
-[[alerts]]
-process = "python"
-state = "LISTEN"
-action = "highlight"   # 黄色高亮行
-
-[[alerts]]
-connections_gt = 100
-action = "bell"        # 进程超过100个连接时告警
-```
-
-告警仅在新条目出现时触发（不是每次刷新）。条件：`port`、`process`、`state`、`connections_gt`。动作：`bell`、`highlight`。
-
-### NDJSON 流式输出
-
-```bash
-prt --json | jq '.process.name'
-```
-
-每次刷新周期为每个连接输出一个 JSON 对象到 stdout。正确处理 SIGPIPE（管道到 `head` 不会 panic）。不初始化 TUI — 可安全用于脚本和管道。
-
-### Watch 模式
-
-```bash
-prt watch 3000 8080 5432
-```
-
-简洁的非 TUI 显示，展示特定端口的 UP/DOWN 状态。状态变化时发出 BEL (`\x07`) 信号。连接终端时支持 ANSI 颜色，管道时为纯文本。
-
-```
-:3000 ● UP   nginx (1234)   since 14:32:05
-:8080 ○ DOWN                 since 14:35:12
-:5432 ● UP   postgres (567)  since 14:32:05
-```
-
-### 导出
-
-```bash
-prt --export json    # 所有连接的 JSON 快照
-prt --export csv     # CSV 快照
-```
-
-### 多语言界面
-
-英语、俄语、中文。语言优先级：
-
-1. `--lang en|ru|zh` 命令行参数（最高优先级）
-2. `PRT_LANG` 环境变量
-3. 系统语言自动检测
-4. 英语（默认）
-
-在 TUI 中按 `L` 实时切换语言，无需重启。
-
-## 安装
-
-```bash
+```sh
 cargo install prt
+prt
 ```
 
-<details>
-<summary><b>从源码编译</b></summary>
+如果系统隐藏了其他用户的进程，可运行 `sudo prt`。普通查看不需要管理员权限。
 
-```bash
+从当前源码构建：
+
+```sh
 git clone https://github.com/rekurt/prt.git
 cd prt
-make install    # 或: cargo install --path crates/prt
+cargo install --path crates/prt
 ```
 
-**系统要求:** Rust 1.75+ · macOS 10.15+ 或 Linux（需要 `/proc`）· `lsof`（macOS 已预装）
+## 主要功能
 
-</details>
+| 任务 | `prt` 的帮助 |
+|---|---|
+| 查找端口冲突 | 按端口、进程、协议、状态、服务、PID 或用户搜索 |
+| 追踪连接变化 | 每两秒刷新，并突出显示新增和关闭的连接 |
+| 调查进程 | 查看命令行、父进程树、CPU、内存、打开文件和相关连接 |
+| 查看网络拓扑 | 以 `进程 → 本地端口 → 远程端点` 的树形结构显示 |
+| 查找可疑监听器 | 使用内置规则标记 `[!]`，并支持单独过滤 |
+| 识别容器 | 检测并显示所属 Docker 或 Podman 容器 |
+| 管理 SSH 转发 | 读取 SSH config，并创建、编辑、重启或保存隧道 |
+| 自动化检查 | 导出单次 JSON/CSV 快照，或持续输出 NDJSON |
 
-## 使用方法
+`prt` 还可以估算系统网络吞吐量、识别常用端口服务、执行可配置告警，并提供终止进程、防火墙封锁、复制、系统调用追踪和 SSH 转发等上下文操作。
 
-```bash
-prt                     # 启动 TUI
-prt --lang zh           # 中文界面
-prt --export json       # 导出 JSON 快照
-prt --export csv        # 导出 CSV 快照
-prt --json              # NDJSON 流式输出
-prt watch 80 443 5432   # 简洁端口监控模式
-sudo prt                # 以 root 运行（查看所有进程）
+## 命令行模式
+
+```sh
+prt                         # 启动交互式 TUI
+prt --lang zh               # 使用中文（也支持 en 和 ru）
+prt --export json           # 输出一次 JSON 快照并退出
+prt --export csv            # 输出一次 CSV 快照并退出
+prt --json                  # 持续输出 NDJSON
+prt watch 80 443 5432       # 监控指定端口的 UP/DOWN 状态
+sudo prt                    # 包含当前用户看不到的进程
 ```
 
-## 快捷键
+需要有限快照时使用 `--export`。`--json` 会持续运行，并在每次扫描时为每个连接输出一个对象；当 `head` 等下游命令关闭管道时，它会正常退出。
 
-**全局:**
+```sh
+# 保存快照以便比较或记录事件。
+prt --export json > ports.json
+
+# 从实时流中读取进程名。
+prt --json | jq -r '.process.name'
+
+# 仅监控开发端口。
+prt watch 3000 5432 8080
+```
+
+## 界面指南
+
+使用 `Tab` 和 `Shift+Tab` 在三个顶级页面之间切换：
+
+| 页面 | 用途 | 子标签 |
+|---|---|---|
+| 连接 | 可排序连接表和可选详情面板 | 无 |
+| 进程 | 所选进程详情及网络拓扑 | 详情、拓扑 |
+| SSH | SSH config 中的主机和受管理的隧道 | 主机、隧道 |
+
+按 `?` 打开应用内快捷键说明。不想记忆快捷键时，可按 `:` 搜索命令面板。
+
+### 常用快捷键
 
 | 按键 | 操作 |
-|------|------|
-| `?` | 帮助 (cheat sheet) |
+|---|---|
+| `?` | 打开帮助；任意键关闭 |
 | `q` | 退出 |
-| `Tab` / `Shift+Tab` | 下一个 / 上一个分区 (连接 \| 进程 \| SSH) |
-| `Space` | 操作菜单（终止 / 复制 / 封锁 / 跟踪 / 转发） |
-| `/` | 搜索 / 过滤（`!` = 仅可疑） |
-| `Esc` | 关闭模态框 · 再按一次清除过滤 |
-| `r` | 刷新 |
-| `s` | Sudo 密码 |
-| `L` | 切换语言 |
-| `j`/`k` `↑`/`↓` `g`/`G` | 移动 / 滚动 / 跳到顶部 / 底部 |
+| `Tab` / `Shift+Tab` | 下一个 / 上一个页面 |
+| `Space` | 打开上下文操作菜单 |
+| `:` | 打开可搜索的命令面板 |
+| `/` | 搜索和过滤；连续按两次 `Esc` 清除非空过滤器 |
+| `p` | 暂停或继续自动刷新 |
+| `r` | 立即刷新 |
+| `s` | 输入 sudo 密码以查看更多进程 |
+| `L` | 切换界面语言 |
+| `j` / `k`、`↑` / `↓` | 移动或滚动 |
+| `g` / `G`、`Home` / `End` | 跳到开头 / 结尾 |
+| `K` / `Delete` | 请求终止所选进程 |
+| `c` | 复制所选连接 |
 
-**直接快捷键（任意分区）:**
+页面专用快捷键：
 
-| 按键 | 操作 |
-|------|------|
-| `K` / `Del` | 终止选中进程 |
-| `c` | 复制行到剪贴板 |
+| 上下文 | 按键 | 操作 |
+|---|---|---|
+| 连接 | `Enter` | 在“进程”页面打开所选进程 |
+| 连接 | `d` | 显示或隐藏底部详情面板 |
+| 连接 | `o` / `O` | 下一个排序列 / 反转排序方向 |
+| 进程 | `[` / `]` | 切换详情和拓扑 |
+| SSH | `[` / `]` | 切换主机和隧道 |
+| SSH 主机 | `Enter` | 为所选主机打开隧道表单 |
+| SSH 主机 | `r` | 重新加载 SSH 和 `prt` 配置 |
+| SSH 隧道 | `n` / `e` | 新建 / 编辑隧道 |
+| SSH 隧道 | `K` / `r` / `s` | 终止 / 重启 / 保存隧道 |
 
-**连接分区:**
+## 搜索与变化追踪
 
-| 按键 | 操作 |
-|------|------|
-| `Enter` / `d` | 切换底部详情面板 |
-| `o` / `O` | 下一排序列 / 反转方向 |
+按 `/` 过滤实时表格。普通文本会匹配连接数据；`new`、`gone` 和 `active` 等状态别名可筛选生命周期状态。输入 `!` 或 `suspicious` 只显示被可疑连接检测器标记的条目。
 
-**进程分区:**
-
-| 按键 | 操作 |
-|------|------|
-| `[` / `]` | 切换子标签 (详情 \| 拓扑) |
-
-**SSH 分区:**
-
-| 按键 | 操作 |
-|------|------|
-| `[` / `]` | 切换子标签 (主机 \| 隧道) |
-| 主机: `Enter` | 从所选主机创建新隧道 |
-| 主机: `r` | 重新加载 `~/.ssh/config` 与 prt 配置 |
-| 隧道: `n` | 打开新建隧道表单 |
-| 隧道: `e` | 编辑选中隧道（保存时 kill + 重启） |
-| 隧道: `K` | 终止选中隧道 |
-| 隧道: `r` | 重启选中隧道 |
-| 隧道: `s` | 保存活跃隧道到配置 |
+新增条目显示为绿色；关闭的条目显示为暗红色，并保留五秒。连接状态和持续时间有文字显示，但 new/gone 的区别目前仍依赖颜色。
 
 ## 配置
 
-创建 `~/.config/prt/config.toml`:
+可选配置文件位于 `~/.config/prt/config.toml`。文件不存在时使用默认值；解析失败时会报告错误并继续使用默认值。
 
 ```toml
-# 自定义端口名
+# 添加或覆盖端口服务名。
 [known_ports]
-3000 = "my-app"
-9090 = "prometheus"
+3000 = "frontend"
+5432 = "postgres"
 
-# 告警规则
+# 新 SSH 连接出现时响铃。
 [[alerts]]
 port = 22
 action = "bell"
 
+# 高亮 Python 监听器。
 [[alerts]]
 process = "python"
 state = "LISTEN"
 action = "highlight"
 
-[[alerts]]
-connections_gt = 100
-action = "bell"
+# 添加 ~/.ssh/config 之外的主机。
+[[ssh_hosts]]
+alias = "staging"
+hostname = "staging.example.com"
+user = "deploy"
+port = 22
 ```
 
-## 开发
+告警条件包括 `port`、`process`、`state` 和 `connections_gt`；操作包括 `bell` 和 `highlight`。铃声只会为新条目触发。
 
-```bash
-cargo build --workspace          # 构建
-cargo test --workspace           # 测试（188个测试）
-cargo clippy --workspace         # 代码检查
-cargo fmt --all -- --check       # 格式检查
-cargo bench -p prt-core          # 基准测试
+SSH 页面还会读取 `~/.ssh/config`。隧道页面会把已保存隧道写入 `prt` 配置的 `[[ssh_tunnels]]` 部分。
+
+## 安全与权限
+
+扫描和导航是只读操作。会改变系统状态的功能集中在 `Space` 菜单中：
+
+- 终止进程时需要选择 SIGTERM 或 SIGKILL；
+- 防火墙封锁会要求确认，并需要相应权限；
+- 系统调用追踪在 Linux 上需要 `ptrace` 权限，在 macOS 上需要可用的 `dtruss` 权限；
+- SSH 转发会使用隧道表单中显示的参数启动 `ssh` 子进程。
+
+执行前请检查确认信息或表单。漏洞报告方法和支持版本见[安全策略](SECURITY.md)。
+
+## 文档无障碍
+
+- README 开头提供可直接复制的快速开始，链接文字能够说明目标。
+- 演示提供静态预览、详细替代文本和文字说明。
+- TUI 完全由键盘控制，并包含帮助页面和命令面板。
+- 界面和 README 提供英语、俄语和中文版本。
+- 连接状态和可疑标记使用文字；new/gone 生命周期提示目前仍依赖颜色。
+- JSON、CSV、NDJSON 和 watch 模式为全屏 TUI 提供替代方案。
+
+如果辅助技术无法使用终端界面，`prt --export json` 是最稳定的机器可读替代方式。
+
+## 架构与开发
+
+仓库是包含两个 crate 的 Rust workspace：
+
+```text
+crates/
+├── prt-core/   扫描、追踪、过滤、告警、配置、进程信息、
+│               容器、国际化和平台适配
+└── prt/        CLI、ratatui 界面、输入处理、流模式、watch 模式、
+                系统调用追踪和 SSH 隧道管理
 ```
 
-详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+```sh
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
 
-## 常见问题
-
-### 如何查看所有进程？某些端口显示 "unknown"。
-
-使用 `sudo prt` 运行 — 没有 root 权限时，操作系统会隐藏其他用户的进程 PID。
-
-### prt 支持 Windows 吗？
-
-目前不支持。`prt` 当前支持 **macOS**（10.15+）和 **Linux**（需要 `/proc`）。Windows 支持正在 issue tracker 中跟踪。
-
-### prt 和 `htop` / `btop` 有什么区别？
-
-`htop`/`btop` 是通用进程监控器。`prt` 专注于**网络连接和端口** — 显示哪个进程使用哪个端口、追踪连接生命周期、检测异常，并提供网络特定操作（防火墙封锁、strace、SSH 隧道）。
-
-### prt 可以用在脚本和管道中吗？
-
-可以！使用 `prt --json` 进行 NDJSON 流式输出，`prt --export json|csv` 获取快照，或 `prt watch <端口>` 进行简单的 UP/DOWN 监控。
-
-### prt 在生产环境中安全吗？
-
-`prt` 默认是**只读诊断工具**。破坏性操作（终止进程、封锁 IP、附加 strace）始终需要明确确认。
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=rekurt/prt&type=Date)](https://star-history.com/#rekurt/prt&Date)
+库 API 见 [docs.rs 上的 `prt-core` 文档](https://docs.rs/prt-core)，参与贡献请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可证
 
-[MIT](LICENSE)
+本项目使用 [MIT 许可证](LICENSE)。
 
----
-
-<div align="center">
-
-**如果 `prt` 对您有帮助，请在 GitHub 上点个 Star！**
-
-[![GitHub stars](https://img.shields.io/github/stars/rekurt/prt?style=social)](https://github.com/rekurt/prt)
-
-</div>
+如果 `prt` 对你有帮助，欢迎[在 GitHub 上给项目加星](https://github.com/rekurt/prt)。
