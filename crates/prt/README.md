@@ -2,83 +2,55 @@
 
 [![Crates.io](https://img.shields.io/crates/v/prt.svg)](https://crates.io/crates/prt)
 [![CI](https://github.com/rekurt/prt/actions/workflows/ci.yml/badge.svg)](https://github.com/rekurt/prt/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/rekurt/prt/blob/master/LICENSE)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/rekurt/prt/blob/master/LICENSE)
 
-**Real-time terminal UI for monitoring network ports — interactive alternative to lsof/ss with colors, filtering and process trees.**
+`prt` is a real-time terminal interface for discovering which processes own network ports on macOS and Linux. It adds filtering, lifecycle tracking, process details, network topology, SSH tunnels, alerts, and automation-friendly output to the usual `lsof` or `/proc` snapshot.
 
-<img src="https://raw.githubusercontent.com/rekurt/prt/master/docs/prt.gif" alt="prt demo" width="720">
+<img src="https://raw.githubusercontent.com/rekurt/prt/master/docs/prt.gif" alt="Animated prt demo showing live connections, process details, topology, command palette, and contextual actions" width="960">
+
+[View a static demo frame](https://github.com/rekurt/prt/blob/master/docs/prt-demo.png) · [Read the demo transcript](https://github.com/rekurt/prt/blob/master/docs/demo-transcript.md) · [Open the full documentation](https://github.com/rekurt/prt#readme)
 
 ## Install
 
-```bash
+```sh
 cargo install prt
+prt
 ```
 
-**Requirements:** Rust 1.75+ · macOS 10.15+ or Linux with `/proc` · `lsof` (macOS — preinstalled)
+Requirements: Rust 1.75+ for Cargo installation; macOS 10.15+ with `lsof`, or Linux with `/proc`.
 
-## Features
+## Command-line modes
 
-| Feature | Description |
-|---------|-------------|
-| **Live table** | Ports, services, protocols, states, PIDs, processes, users. Auto-refreshes every 2s |
-| **Change tracking** | New connections green; closed fade red for 5s |
-| **Known ports** | Service column with ~170 built-in names + config overrides |
-| **Connection aging** | Color-coded by age (>1h yellow, >24h red, CLOSE_WAIT always red) |
-| **Suspicious detector** | `[!]` flags for non-root on privileged ports, scripts on sensitive ports |
-| **Process tree** | Full parent chain (e.g. `launchd → nginx → worker`) |
-| **Sections** | `Tab` cycles Connections / Processes / SSH; sub-tabs with `[` / `]` |
-| **Details panel** | Single unified panel under the table — bind, iface, remote, state, cmdline, related ports, process tree |
-| **Action menu** | `Space` → contextual list (Kill / Copy / Block / Trace / Forward) |
-| **Search & filter** | By port, service, process, PID, protocol, state, user. `!` = suspicious. `Esc` twice to clear |
-| **Kill** | `K` → `y` (SIGTERM) or `f` (SIGKILL) |
-| **Firewall block** | `Space → Block IP` — adds rule + status-bar undo command |
-| **Strace** | `Space → Trace` — live syscall stream in split panel |
-| **SSH Forward** | `Space → SSH forward` — opens tunnel form with inline validation |
-| **Containers** | Docker/Podman container name column (auto-hides) |
-| **Bandwidth** | System-wide RX/TX in header |
-| **Export** | `--export json/csv`, `--json` (NDJSON stream) |
-| **Watch mode** | `prt watch 80 443` — compact UP/DOWN with BEL alerts |
-| **Alerts** | TOML config: bell/highlight on port, process, connection count |
-| **Multilingual** | English, Russian, Chinese. Switch with `L` |
-| **Config** | `~/.config/prt/config.toml` — port overrides, alert rules |
-
-## Usage
-
-```bash
-prt                     # launch TUI
-prt --lang ru           # Russian interface
-prt --export json       # export snapshot to JSON
-prt --json              # NDJSON streaming
-prt watch 80 443        # compact port watch
-sudo prt                # run as root
+```sh
+prt                         # interactive TUI
+prt --lang ru               # language: en, ru, or zh
+prt --export json           # one JSON snapshot
+prt --export csv            # one CSV snapshot
+prt --json                  # continuous NDJSON stream
+prt watch 80 443            # compact port monitor
+sudo prt                    # include processes hidden from this user
 ```
 
-## Keyboard shortcuts
+Use `--export` for a finite snapshot and `--json` for a continuous stream.
 
-**Global:** `?` help, `q` quit, `Tab`/`Shift+Tab` next/prev section, `Space` action menu, `/` filter, `r` refresh, `s` sudo, `L` language
+## Interface
 
-**Direct:** `K`/`Del` kill, `c` copy line
+- `Tab` / `Shift+Tab`: Connections, Processes, and SSH sections
+- `?`: complete in-app help
+- `:`: searchable command palette
+- `/`: search and filter
+- `Space`: contextual actions
+- `Enter`: open the selected process
+- `d`: toggle the Connections details panel
+- `[` / `]`: switch Processes or SSH sub-tabs
+- `p`: pause or resume automatic refresh
+- `L`: switch language
 
-**Connections:** `Enter`/`d` toggle Details panel, `o`/`O` sort column / reverse
+The TUI is keyboard-driven. A static preview and text transcript are provided for readers who prefer not to view an autoplaying animation. JSON, CSV, NDJSON, and watch modes provide non-full-screen alternatives.
 
-**Processes / SSH:** `[`/`]` switch sub-tab. SSH/Tunnels: `n` new · `e` edit · `K` kill · `r` restart · `s` save
+## Crate layout
 
-## Architecture
-
-`prt` is the TUI frontend built on [ratatui](https://ratatui.rs). All core logic lives in [prt-core](https://crates.io/crates/prt-core).
-
-```
-crates/
-├── prt-core/    # Core library: scanner, tracker, alerts, known ports, i18n, platform
-└── prt/         # TUI binary (ratatui + crossterm + clap)
-    ├── app.rs       # App state, main loop, caching
-    ├── ui.rs        # ViewMode-based rendering
-    ├── input.rs     # Key dispatch
-    ├── stream.rs    # NDJSON streaming mode
-    ├── watch.rs     # Port watch mode
-    ├── tracer.rs    # Strace/dtruss session management
-    └── forward.rs   # SSH tunnel manager
-```
+This binary crate contains the clap CLI, ratatui interface, input handling, NDJSON and watch modes, system-call tracing, and SSH tunnel management. Scanning and domain logic live in [`prt-core`](https://crates.io/crates/prt-core).
 
 ## License
 

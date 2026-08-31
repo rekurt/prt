@@ -1,0 +1,12 @@
+{
+  "config": {
+    // README prose and translated text are intentionally not hard-wrapped.
+    "MD013": false,
+    // Small HTML wrappers center badges and constrain the demo image on GitHub.
+    "MD033": false,
+    // The visible H1 is inside the centered HTML wrapper.
+    "MD041": false,
+    // Compact table separators remain readable in source and render consistently.
+    "MD060": false
+  }
+}
