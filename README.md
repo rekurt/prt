@@ -13,6 +13,8 @@
 
 [English](README.md) · [Русский](README.ru.md) · [中文](README.zh.md)
 
+[Project website](https://rekurt.github.io/prt/) · [All projects by rekurt](https://rekurt.github.io/projects/)
+
 </div>
 
 `prt` is a keyboard-driven terminal UI for inspecting network connections, finding port conflicts, exploring process details, and managing SSH tunnels on macOS and Linux. It combines a live connection table with filtering, change tracking, process topology, alerts, and script-friendly output.

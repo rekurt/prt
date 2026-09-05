@@ -1,0 +1,22 @@
+name: Pages
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+  schedule:
+    - cron: "11 1,7,13,19 * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  pages:
+    uses: rekurt/rekurt.github.io/.github/workflows/project-pages.yml@main
+    with:
+      slug: prt
