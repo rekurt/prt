@@ -8,7 +8,7 @@
 [![Downloads](https://img.shields.io/crates/d/prt.svg)](https://crates.io/crates/prt)
 [![CI](https://github.com/rekurt/prt/actions/workflows/ci.yml/badge.svg)](https://github.com/rekurt/prt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![API docs](https://docs.rs/prt-core/badge.svg)](https://docs.rs/prt-core)
 
 [English](README.md) · [Русский](README.ru.md) · [中文](README.zh.md)
@@ -31,7 +31,7 @@ The 13-second demo plays directly in the README. You can also [view a static fra
 
 ### Requirements
 
-- Rust 1.75 or newer for installation with Cargo
+- Rust 1.88 or newer for installation with Cargo
 - macOS 10.15 or newer with the built-in `lsof`
 - Linux with a mounted `/proc` filesystem
 - A UTF-8 terminal; a wider window gives the table more room
@@ -39,9 +39,13 @@ The 13-second demo plays directly in the README. You can also [view a static fra
 ### Install and run
 
 ```sh
-cargo install prt
+cargo install prt --locked
 prt
 ```
+
+To reproduce the v0.5.0 installation, pin the version: `cargo install prt --version 0.5.0 --locked`. The current source tree may be ahead of the published release.
+
+To inspect port 3000, type `/3000`, press `Esc` to leave search input while keeping the filter, then press `Enter` to open the selected process. Press `q` to exit; `d` toggles the bottom Details panel in Connections.
 
 Run `sudo prt` when the operating system hides processes owned by other users. Elevated privileges are not required for normal use.
 
@@ -50,7 +54,7 @@ To build the current source instead:
 ```sh
 git clone https://github.com/rekurt/prt.git
 cd prt
-cargo install --path crates/prt
+cargo install --path crates/prt --locked
 ```
 
 ## What you can do

@@ -13,11 +13,11 @@
 ## Install
 
 ```sh
-cargo install prt
+cargo install prt --locked
 prt
 ```
 
-Requirements: Rust 1.75+ for Cargo installation; macOS 10.15+ with `lsof`, or Linux with `/proc`.
+Requirements: Rust 1.88+ for Cargo installation; macOS 10.15+ with `lsof`, or Linux with `/proc`.
 
 ## Command-line modes
 
