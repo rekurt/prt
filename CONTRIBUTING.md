@@ -17,7 +17,7 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-The workspace requires Rust 1.75 or newer. Platform-specific scanner tests run only on their matching operating system.
+The workspace requires Rust 1.88 or newer. Platform-specific scanner tests run only on their matching operating system.
 
 ## Repository map
 

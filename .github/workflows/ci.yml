@@ -35,6 +35,20 @@ jobs:
       - name: Tests
         run: cargo test --workspace
 
+  msrv:
+    name: MSRV (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Check minimum supported Rust version
+        run: cargo check --workspace --all-targets --locked
+
   deny:
     name: Cargo Deny
     runs-on: ubuntu-latest

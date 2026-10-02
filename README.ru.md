@@ -8,7 +8,7 @@
 [![Загрузки](https://img.shields.io/crates/d/prt.svg)](https://crates.io/crates/prt)
 [![CI](https://github.com/rekurt/prt/actions/workflows/ci.yml/badge.svg)](https://github.com/rekurt/prt/actions/workflows/ci.yml)
 [![Лицензия MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![Документация API](https://docs.rs/prt-core/badge.svg)](https://docs.rs/prt-core)
 
 [English](README.md) · [Русский](README.ru.md) · [中文](README.zh.md)
@@ -29,7 +29,7 @@
 
 ### Требования
 
-- Rust 1.75 или новее для установки через Cargo
+- Rust 1.88 или новее для установки через Cargo
 - macOS 10.15 или новее со встроенной утилитой `lsof`
 - Linux с подключённой файловой системой `/proc`
 - Терминал с UTF-8; в широком окне помещается больше столбцов
@@ -37,9 +37,13 @@
 ### Установка и запуск
 
 ```sh
-cargo install prt
+cargo install prt --locked
 prt
 ```
+
+Чтобы воспроизвести установку v0.5.0, укажите версию: `cargo install prt --version 0.5.0 --locked`. Текущая ветка исходного кода может опережать опубликованный релиз.
+
+Для просмотра порта 3000 введите `/3000`, нажмите `Esc`, чтобы завершить ввод и сохранить фильтр, затем `Enter`, чтобы открыть выбранный процесс. Клавиша `q` завершает программу; `d` переключает нижнюю панель Details в разделе «Соединения».
 
 Запустите `sudo prt`, если операционная система скрывает процессы других пользователей. Для обычного просмотра повышенные права не нужны.
 
@@ -48,7 +52,7 @@ prt
 ```sh
 git clone https://github.com/rekurt/prt.git
 cd prt
-cargo install --path crates/prt
+cargo install --path crates/prt --locked
 ```
 
 ## Основные возможности

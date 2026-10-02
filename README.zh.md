@@ -8,7 +8,7 @@
 [![下载量](https://img.shields.io/crates/d/prt.svg)](https://crates.io/crates/prt)
 [![CI](https://github.com/rekurt/prt/actions/workflows/ci.yml/badge.svg)](https://github.com/rekurt/prt/actions/workflows/ci.yml)
 [![MIT 许可证](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 [![API 文档](https://docs.rs/prt-core/badge.svg)](https://docs.rs/prt-core)
 
 [English](README.md) · [Русский](README.ru.md) · [中文](README.zh.md)
@@ -29,7 +29,7 @@
 
 ### 环境要求
 
-- 使用 Cargo 安装时需要 Rust 1.75 或更高版本
+- 使用 Cargo 安装时需要 Rust 1.88 或更高版本
 - macOS 10.15 或更高版本（使用系统自带的 `lsof`）
 - Linux，并已挂载 `/proc` 文件系统
 - 支持 UTF-8 的终端；窗口越宽，可显示的表格列越多
@@ -37,9 +37,13 @@
 ### 安装并运行
 
 ```sh
-cargo install prt
+cargo install prt --locked
 prt
 ```
+
+要复现 v0.5.0 的安装，请指定版本：`cargo install prt --version 0.5.0 --locked`。当前源码可能领先于已发布版本。
+
+要查看端口 3000，输入 `/3000`，按 `Esc` 结束输入并保留过滤条件，然后按 `Enter` 打开所选进程。按 `q` 退出；在“连接”页面按 `d` 可切换底部详情面板。
 
 如果系统隐藏了其他用户的进程，可运行 `sudo prt`。普通查看不需要管理员权限。
 
@@ -48,7 +52,7 @@ prt
 ```sh
 git clone https://github.com/rekurt/prt.git
 cd prt
-cargo install --path crates/prt
+cargo install --path crates/prt --locked
 ```
 
 ## 主要功能
