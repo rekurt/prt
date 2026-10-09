@@ -1,0 +1,4 @@
+$ prt watch 59467
+:59467 UP Python (60586) since 0s
+:59467 UP Python (60586) since 2s
+:59467 DOWN since 0s

@@ -32,3 +32,7 @@ vhs docs/demo.tape
 ```
 
 The static README preview is a frame extracted from the same recording.
+
+## Additional static watch example
+
+[`prt-watch-demo.png`](prt-watch-demo.png) shows actual `prt watch` output from a disposable loopback listener using prt 0.6.0. It is separate from the animation above, and is rendered text rather than a TUI screenshot. See the [example notes and transcript](prt-watch-demo.md).
