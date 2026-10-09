@@ -3,9 +3,9 @@ name: Pages
 on:
   push:
     branches: [master]
-    tags: ["v*"]
-  release:
-    types: [published]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
   schedule:
     - cron: "11 1,7,13,19 * * *"
@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   pages:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     uses: rekurt/rekurt.github.io/.github/workflows/project-pages.yml@main
     with:
       slug: prt
