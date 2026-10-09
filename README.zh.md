@@ -41,7 +41,23 @@ cargo install prt --locked
 prt
 ```
 
-要复现 v0.5.0 的安装，请指定版本：`cargo install prt --version 0.5.0 --locked`。当前源码可能领先于已发布版本。
+安装此版本：`cargo install prt --version 0.6.0 --locked`。
+
+Homebrew（macOS arm64/x86_64 和 Linux x86_64）：
+
+```sh
+brew install rekurt/tap/prt
+```
+
+从 [v0.6.0](https://github.com/rekurt/prt/releases/tag/v0.6.0) 下载对应的 DEB/RPM，然后安装：
+
+```sh
+sudo apt install ./prt_0.6.0_amd64.deb
+# Fedora
+sudo dnf install ./prt-0.6.0-1.x86_64.rpm
+```
+
+Linux 二进制包需要 glibc 2.35+（Ubuntu 22.04+、Debian 12+ 或较新的 Fedora）。预编译包不需要 Rust。请使用发布中的 `SHA256SUMS` 验证下载文件。
 
 要查看端口 3000，输入 `/3000`，按 `Esc` 结束输入并保留过滤条件，然后按 `Enter` 打开所选进程。按 `q` 退出；在“连接”页面按 `d` 可切换底部详情面板。
 

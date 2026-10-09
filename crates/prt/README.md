@@ -13,11 +13,15 @@
 ## Install
 
 ```sh
-cargo install prt --locked
+cargo install prt --version 0.6.0 --locked
 prt
 ```
 
 Requirements: Rust 1.88+ for Cargo installation; macOS 10.15+ with `lsof`, or Linux with `/proc`.
+
+Homebrew: `brew install rekurt/tap/prt`. Linux x86_64 DEB/RPM and archives for Linux/macOS are available in [v0.6.0](https://github.com/rekurt/prt/releases/tag/v0.6.0); Linux binaries require glibc 2.35+. Verify downloads against the release `SHA256SUMS`.
+
+SSH tunnels support editing, real status, uptime, listener health (including intermittent flapping), command copying, and automatic reconnect.
 
 ## Command-line modes
 

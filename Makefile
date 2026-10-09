@@ -104,10 +104,8 @@ publish-prt:
 	cargo publish -p prt
 
 ## Publish all crates to crates.io (core first, then binary)
-publish: publish-core
-	@echo "Waiting for crates.io to index prt-core..."
-	@sleep 30
-	$(MAKE) publish-prt
+publish:
+	python3 scripts/publish-crates.py
 
 ## Create git tag v$(VERSION) and push it
 tag:
@@ -115,12 +113,11 @@ tag:
 	git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-## Full release: check → publish → tag → GitHub release
+## Full release: check → tag → CI publishes crates and GitHub release
 publish-release: check
-	$(MAKE) publish
 	$(MAKE) tag
 	@echo ""
-	@echo "Release v$(VERSION) complete!"
+	@echo "Release v$(VERSION) dispatched; check the Release workflow for publication results."
 	@echo "  - crates.io: https://crates.io/crates/prt/$(VERSION)"
 	@echo "  - GitHub release will be created by CI from tag v$(VERSION)"
 
@@ -165,4 +162,4 @@ help:
 	@echo "  make publish-dry   Dry-run publish (verify packaging)"
 	@echo "  make publish       Publish all crates to crates.io"
 	@echo "  make tag           Create and push git tag v$(VERSION)"
-	@echo "  make publish-release  Full release: check + publish + tag"
+	@echo "  make publish-release  Full release: check + tag (CI publishes)"

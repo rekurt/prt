@@ -1,14 +1,20 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags: ["v*"]
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
+  MACOSX_DEPLOYMENT_TARGET: "10.15"
 
 jobs:
   build:
@@ -22,71 +28,98 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-
+            os: ubuntu-22.04
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
       - uses: Swatinem/rust-cache@v2
-
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }} -p prt
-
-      - name: Package
+      - name: Validate tag
+        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ../../../prt-${{ matrix.target }}.tar.gz prt
-          cd ../../..
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "prt") | .version')
+          test "$GITHUB_REF_NAME" = "v$version"
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }} -p prt
+      - name: Package archive
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar czf dist/prt-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release prt
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ruby ruby-dev build-essential rpm
+          sudo gem install fpm -v 1.16.0 --no-document
+      - name: Package and test DEB/RPM
+        if: runner.os == 'Linux'
+        run: bash scripts/package-linux.sh
+      - uses: actions/upload-artifact@v4
         with:
           name: prt-${{ matrix.target }}
-          path: prt-${{ matrix.target }}.tar.gz
+          path: dist/*
+          if-no-files-found: error
 
   publish-crates:
     name: Publish to crates.io
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
-
-      - name: Publish prt-core
-        run: cargo publish -p prt-core
+      - uses: Swatinem/rust-cache@v2
+      - name: Publish crates in dependency order
+        run: python3 scripts/publish-crates.py
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        continue-on-error: true
 
-      - name: Wait for crates.io indexing
-        run: sleep 30
-
-      - name: Publish prt
-        run: cargo publish -p prt
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        continue-on-error: true
+  verify-cargo:
+    name: Install published Cargo package (${{ matrix.os }})
+    needs: publish-crates
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install and smoke test
+        shell: bash
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          cargo install prt --version "=$version" --locked --root "$RUNNER_TEMP/prt-install"
+          binary="$RUNNER_TEMP/prt-install/bin/prt"
+          test "$("$binary" --version)" = "prt $version"
+          "$binary" --help >/dev/null
+          "$binary" --export json | python3 -c 'import json,sys; assert isinstance(json.load(sys.stdin), list)'
 
   release:
     name: Create GitHub Release
-    needs: [build, publish-crates]
+    needs: [build, verify-cargo]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
+          path: dist
+          merge-multiple: true
+      - name: Checksums and release notes
+        shell: bash
+        run: |
+          test -f "docs/releases/$GITHUB_REF_NAME.md"
+          cd dist
+          sha256sum ./*.tar.gz ./*.deb ./*.rpm > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          files: artifacts/**/*.tar.gz
+          name: ${{ github.ref_name }}
+          body_path: docs/releases/${{ github.ref_name }}.md
+          make_latest: true
+          fail_on_unmatched_files: true
+          files: dist/*

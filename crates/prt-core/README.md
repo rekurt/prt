@@ -4,6 +4,8 @@
 [![docs.rs](https://docs.rs/prt-core/badge.svg)](https://docs.rs/prt-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/rekurt/prt/blob/master/LICENSE)
 
+Requires Rust 1.88+. Add version `0.6.0` with `cargo add prt-core@0.6.0`.
+
 Core library for [**prt**](https://crates.io/crates/prt) — a real-time network port monitor for macOS and Linux.
 
 This page documents the library crate. For installation, the terminal interface, keyboard controls, accessible demo alternatives, and CLI modes, see the [project README](https://github.com/rekurt/prt#readme).
@@ -14,7 +16,7 @@ This page documents the library crate. For installation, the terminal interface,
 
 - **Scanning** network ports (TCP/UDP) via `lsof` on macOS or `/proc` on Linux
 - **Tracking** connection changes over time (New → Unchanged → Gone) with `first_seen` aging
-- **Enrichment** — known port names (~170 built-in + user overrides), suspicious connection detection, container awareness
+- **Enrichment** — known port names (~170 built-in + user overrides), suspicious connection and SOCKS/proxy listener detection, container awareness
 - **Filtering** by port, PID, process name, service, protocol, state, user, or `!` (suspicious)
 - **Sorting** by any column, ascending or descending
 - **Exporting** to JSON or CSV
@@ -86,7 +88,7 @@ for entry in &session.entries {
 | `core::scanner` | Scan, diff, sort, filter, export |
 | `core::session` | Refresh cycle state machine with enrichment pipeline |
 | `core::alerts` | Alert rule evaluation (port, process, state, connections_gt) |
-| `core::suspicious` | Suspicious connection heuristics (3 rules) |
+| `core::suspicious` | Suspicious connection and SOCKS/proxy listener heuristics |
 | `core::bandwidth` | System-wide RX/TX rate (Linux: /proc/net/dev, macOS: netstat -ib) |
 | `core::container` | Docker/Podman resolution via batched CLI calls |
 | `core::process_detail` | CWD, env, open files, CPU %, RSS |

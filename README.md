@@ -43,7 +43,23 @@ cargo install prt --locked
 prt
 ```
 
-To reproduce the v0.5.0 installation, pin the version: `cargo install prt --version 0.5.0 --locked`. The current source tree may be ahead of the published release.
+Pin this release with `cargo install prt --version 0.6.0 --locked`.
+
+Homebrew (macOS arm64/x86_64 and Linux x86_64):
+
+```sh
+brew install rekurt/tap/prt
+```
+
+Download the matching DEB/RPM from [v0.6.0](https://github.com/rekurt/prt/releases/tag/v0.6.0), then install it locally:
+
+```sh
+sudo apt install ./prt_0.6.0_amd64.deb
+# Fedora
+sudo dnf install ./prt-0.6.0-1.x86_64.rpm
+```
+
+Linux binaries require glibc 2.35+ (Ubuntu 22.04+, Debian 12+, or a recent Fedora). Prebuilt packages do not require Rust. Compare the downloaded file with `SHA256SUMS` in the release.
 
 To inspect port 3000, type `/3000`, press `Esc` to leave search input while keeping the filter, then press `Enter` to open the selected process. Press `q` to exit; `d` toggles the bottom Details panel in Connections.
 

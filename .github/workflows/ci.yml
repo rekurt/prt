@@ -32,6 +32,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Release publication guard tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       - name: Tests
         run: cargo test --workspace
 

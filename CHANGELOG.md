@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-06-12
+## [0.6.0] - 2026-10-09
+
+### Release maintenance
+
+- Detect intermittent SSH tunnel listener flapping; ignore retained closed sockets when checking listener health.
+- Preserve selection across refreshes and process detail caches while the PID remains present.
+- Add external-command timeouts and platform guards; fix tunnel reconnect, uptime and SOCKS detection edge cases.
+- Update vulnerable dependencies and require Rust 1.88 for locked, reproducible Cargo installation.
+- Refresh documentation and accessible demos; publish updated project pages.
+- Add Homebrew installation, Linux x86_64 DEB/RPM packages and SHA-256 checksums.
+- Make crates.io publication failures visible and publish crates in dependency order.
 
 ### Changed (breaking)
 
