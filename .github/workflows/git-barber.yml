@@ -1,0 +1,26 @@
+name: Git Barber
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Report only; do not delete branches
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == github.event.repository.default_branch)
+    uses: rekurt/git-barber/.github/workflows/branch-cleanup.yml@05dceb4fbab9f0945aa478a5726eb34ff40d09a5
+    with:
+      dry-run: true
+      min-age-days: 7
