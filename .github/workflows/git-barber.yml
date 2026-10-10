@@ -22,5 +22,5 @@ jobs:
        github.event.pull_request.base.ref == github.event.repository.default_branch)
     uses: rekurt/git-barber/.github/workflows/branch-cleanup.yml@05dceb4fbab9f0945aa478a5726eb34ff40d09a5
     with:
-      dry-run: true
+      dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
       min-age-days: 7
