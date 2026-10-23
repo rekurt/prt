@@ -102,7 +102,7 @@ sudo prt                    # include processes hidden from the current user
 
 `--export`, `--json`, and `watch` are mutually exclusive; combining them is an argument error.
 
-Use `--export` for a finite snapshot. `--json` keeps running and emits one object per connection on each scan cycle; both output modes stop cleanly when a downstream command such as `head` closes the pipe.
+Use `--export` for a finite snapshot. `--json` keeps running and emits one object per connection on each scan cycle; `--export`, `--json`, and `watch` stop cleanly when a downstream command such as `head` closes the pipe.
 
 Examples:
 
