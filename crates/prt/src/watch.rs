@@ -19,8 +19,21 @@ struct PortState {
 }
 
 /// Run the watch loop for the given ports. Never returns unless
-/// interrupted or a write error occurs.
+/// interrupted, the output pipe closes, or another error occurs.
 pub fn run_watch(ports: Vec<u16>) -> Result<()> {
+    match watch_loop(ports) {
+        Err(error)
+            if error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|error| error.kind() == io::ErrorKind::BrokenPipe) =>
+        {
+            Ok(())
+        }
+        result => result,
+    }
+}
+
+fn watch_loop(ports: Vec<u16>) -> Result<()> {
     let is_tty = io::stdout().is_terminal();
     let mut stdout = io::stdout().lock();
     let mut prev_states: HashMap<u16, bool> = HashMap::new();
