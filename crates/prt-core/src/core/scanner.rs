@@ -189,8 +189,8 @@ fn matches_term(e: &TrackedEntry, term: &str) -> bool {
     if term == "!" {
         return !e.suspicious.is_empty();
     }
-    if matches_status_alias(e, term) {
-        return true;
+    if matches!(term, "new" | "gone" | "unchanged" | "active") {
+        return matches_status_alias(e, term);
     }
     if term == "risk:high" || term == "suspicious" {
         return !e.suspicious.is_empty();
@@ -1010,6 +1010,40 @@ mod tests {
         assert_eq!(filter_indices(&entries, "active"), vec![0, 1]);
         assert_eq!(filter_indices(&entries, "risk:high"), vec![1]);
         assert_eq!(filter_indices(&entries, "suspicious"), vec![1]);
+    }
+
+    #[test]
+    fn status_aliases_do_not_fall_back_to_text_search() {
+        let mut entries = vec![
+            make_tracked(80, 10, "gone-helper", EntryStatus::New),
+            make_tracked(443, 11, "new-helper", EntryStatus::Unchanged),
+            make_tracked(53, 12, "active-helper", EntryStatus::Gone),
+        ];
+        for entry in &mut entries {
+            entry.service_name = Some("new gone unchanged active".into());
+            entry.container_name = Some("new gone unchanged active".into());
+            entry.entry.process.user = Some("new gone unchanged active".into());
+        }
+        for (alias, expected) in [
+            ("new", vec![0]),
+            ("unchanged", vec![1]),
+            ("gone", vec![2]),
+            ("active", vec![0, 1]),
+        ] {
+            assert_eq!(filter_indices(&entries, alias), expected, "{alias}");
+            assert_eq!(filter_indices(&entries, &alias.to_uppercase()), expected);
+            assert_eq!(
+                filter_indices(&entries, &format!("status:{alias}")),
+                expected
+            );
+        }
+        assert_eq!(
+            filter_indices(&entries, "gone port:80"),
+            Vec::<usize>::new()
+        );
+        assert_eq!(filter_indices(&entries, "proc:gone"), vec![0]);
+        assert_eq!(filter_indices(&entries, "proc:new"), vec![1]);
+        assert_eq!(filter_indices(&entries, "proc:active"), vec![2]);
     }
 
     // ── export: table-driven ──────────────────────────────────────

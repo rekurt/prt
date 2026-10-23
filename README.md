@@ -164,7 +164,7 @@ Section-specific keys:
 
 ## Search and change tracking
 
-Type `/` to filter the live table. Plain text matches visible connection data; status aliases such as `new`, `gone`, and `active` can narrow the lifecycle state. Type `!` or `suspicious` to show entries flagged by the suspicious-connection detector.
+Type `/` to filter the live table. Plain text matches visible connection data; status aliases `new`, `gone`, `unchanged`, and `active` select the lifecycle state. These aliases never match process names or other text fields; use `proc:gone`, for example, to search for a process name containing `gone`. Type `!` or `suspicious` to show entries flagged by the suspicious-connection detector.
 
 New entries are green. Closed entries are dimmed red and remain visible for five seconds. Connection state and age remain available as text, but the new/gone distinction is currently color-based.
 
