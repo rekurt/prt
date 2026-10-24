@@ -220,6 +220,8 @@ pub fn write_tunnels(path: &Path, specs: &[SshTunnelSpec]) -> io::Result<()> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e),
     };
+    toml::from_str::<toml::Value>(&existing)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     let stripped = strip_ssh_tunnels_section(&existing);
 
     let configs: Vec<SshTunnelConfig> = specs.iter().map(SshTunnelConfig::from_spec).collect();
@@ -424,6 +426,17 @@ alias = "z"
         assert!(stripped.contains("[[ssh_hosts]]"));
         assert!(!stripped.contains("[[ssh_tunnels]]"));
         assert!(!stripped.contains("\"old\""));
+    }
+
+    #[test]
+    fn write_tunnels_preserves_invalid_config() {
+        let dir = tempdir();
+        let path = dir.join("config.toml");
+        let content = "# keep my unfinished edit\n[[ssh_tunnels]]\nlocal_port = [\n";
+        std::fs::write(&path, content).unwrap();
+        let error = write_tunnels(&path, &[]).expect_err("invalid TOML must not be overwritten");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(std::fs::read_to_string(path).unwrap(), content);
     }
 
     #[test]

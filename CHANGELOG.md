@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-24
+
+### Fixed
+
+- Bracket IPv6 targets in SSH local forwarding arguments.
+- Preserve malformed TOML configuration when saving tunnels.
+- Keep lifecycle status filters separate from text searches.
+- Reject incompatible output modes and allow language selection with watch.
+- Exit cleanly when snapshot or watch output pipes close.
+
 ## [0.6.0] - 2026-10-09
 
 ### Release maintenance

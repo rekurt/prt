@@ -57,6 +57,11 @@ impl SshTunnelSpec {
         match self.kind {
             TunnelKind::Local => {
                 let host = self.remote_host.as_deref().unwrap_or("localhost");
+                let host = if host.contains(':') && !host.starts_with('[') {
+                    format!("[{host}]")
+                } else {
+                    host.to_owned()
+                };
                 let port = self.remote_port.unwrap_or(0);
                 vec![
                     "-N".into(),
@@ -184,6 +189,21 @@ mod tests {
                 .map(String::from)
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn local_forward_brackets_ipv6_targets() {
+        for host in ["::1", "[::1]", "fe80::1%lo0"] {
+            let mut spec = local_spec();
+            spec.remote_host = Some(host.into());
+            let expected = if host.starts_with('[') {
+                format!("5433:{host}:5432")
+            } else {
+                format!("5433:[{host}]:5432")
+            };
+            assert_eq!(spec.ssh_args()[2], expected);
+            assert_eq!(spec.ssh_args_with(&ResolvedHost::default())[2], expected);
+        }
     }
 
     #[test]
