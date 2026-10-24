@@ -41,7 +41,7 @@ cargo install prt --locked
 prt
 ```
 
-安装此版本：`cargo install prt --version 0.6.0 --locked`。
+安装此版本：`cargo install prt --version 0.6.1 --locked`。
 
 Homebrew（macOS arm64/x86_64 和 Linux x86_64）：
 
@@ -49,12 +49,12 @@ Homebrew（macOS arm64/x86_64 和 Linux x86_64）：
 brew install rekurt/tap/prt
 ```
 
-从 [v0.6.0](https://github.com/rekurt/prt/releases/tag/v0.6.0) 下载对应的 DEB/RPM，然后安装：
+从 [v0.6.1](https://github.com/rekurt/prt/releases/tag/v0.6.1) 下载对应的 DEB/RPM，然后安装：
 
 ```sh
-sudo apt install ./prt_0.6.0_amd64.deb
+sudo apt install ./prt_0.6.1_amd64.deb
 # Fedora
-sudo dnf install ./prt-0.6.0-1.x86_64.rpm
+sudo dnf install ./prt-0.6.1-1.x86_64.rpm
 ```
 
 Linux 二进制包需要 glibc 2.35+（Ubuntu 22.04+、Debian 12+ 或较新的 Fedora）。预编译包不需要 Rust。请使用发布中的 `SHA256SUMS` 验证下载文件。

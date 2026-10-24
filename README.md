@@ -43,7 +43,7 @@ cargo install prt --locked
 prt
 ```
 
-Pin this release with `cargo install prt --version 0.6.0 --locked`.
+Pin this release with `cargo install prt --version 0.6.1 --locked`.
 
 Homebrew (macOS arm64/x86_64 and Linux x86_64):
 
@@ -51,12 +51,12 @@ Homebrew (macOS arm64/x86_64 and Linux x86_64):
 brew install rekurt/tap/prt
 ```
 
-Download the matching DEB/RPM from [v0.6.0](https://github.com/rekurt/prt/releases/tag/v0.6.0), then install it locally:
+Download the matching DEB/RPM from [v0.6.1](https://github.com/rekurt/prt/releases/tag/v0.6.1), then install it locally:
 
 ```sh
-sudo apt install ./prt_0.6.0_amd64.deb
+sudo apt install ./prt_0.6.1_amd64.deb
 # Fedora
-sudo dnf install ./prt-0.6.0-1.x86_64.rpm
+sudo dnf install ./prt-0.6.1-1.x86_64.rpm
 ```
 
 Linux binaries require glibc 2.35+ (Ubuntu 22.04+, Debian 12+, or a recent Fedora). Prebuilt packages do not require Rust. Compare the downloaded file with `SHA256SUMS` in the release.
